@@ -2,7 +2,7 @@ import { type OrderParams, type Direction } from '../commitReveal'
 import { type PublicClient } from 'viem'
 import { CLOB_ABI } from '../abis'
 
-// [FIX A-4] recibe publicClient como parámetro — no crea uno nuevo en cada llamada
+// [FIX A-4] receives publicClient as a parameter — does not create a new one on every call
 export async function getArbitrageParams(
   publicClient: PublicClient
 ): Promise<OrderParams> {
@@ -20,8 +20,8 @@ export async function getArbitrageParams(
     functionName: 'getOpenAsks'
   }) as bigint[]
 
-  // [FIX A-8] iterar todos los asks para encontrar el mejor (precio más bajo)
-  // openAsks[0] no es necesariamente el mejor — el array puede estar desordenado
+  // [FIX A-8] iterate through all asks to find the best one (lowest price)
+  // openAsks[0] is not necessarily the best — the array might be unsorted
   let bestAskId:    bigint | null = null
   let bestAskPrice                = BigInt('999999999999999999999999999999')
 
@@ -39,16 +39,16 @@ export async function getArbitrageParams(
     }
   }
 
-  // Si hay un ask revelado, poner un BID ligeramente más alto para cruzar el spread
+  // If there is a revealed ask, place a slightly higher BID to cross the spread
   if (bestAskId !== null) {
     return {
-      price:     bestAskPrice + BigInt(10 ** 15), // 0.001 USDC más alto
+      price:     bestAskPrice + BigInt(10 ** 15), // 0.001 USDC higher
       amount:    BigInt(1) * BigInt(10 ** 18),
       direction: 0 as Direction                   // BID
     }
   }
 
-  // [FIX A-8] iterar todos los bids para encontrar el mejor (precio más alto)
+  // [FIX A-8] iterate through all bids to find the best one (highest price)
   let bestBidId:    bigint | null = null
   let bestBidPrice                = BigInt(0)
 
@@ -66,16 +66,16 @@ export async function getArbitrageParams(
     }
   }
 
-  // Si hay un bid revelado, poner un ASK ligeramente más bajo para cruzar
+  // If there is a revealed bid, place a slightly lower ASK to cross the spread
   if (bestBidId !== null) {
     return {
-      price:     bestBidPrice - BigInt(10 ** 15), // 0.001 USDC más bajo
+      price:     bestBidPrice - BigInt(10 ** 15), // 0.001 USDC lower
       amount:    BigInt(1) * BigInt(10 ** 18),
       direction: 1 as Direction                   // ASK
     }
   }
 
-  // Sin oportunidad de arbitraje — orden neutra
+  // No arbitrage opportunity found — neutral order fallback
   return {
     price:     BigInt(3000) * BigInt(10 ** 18),
     amount:    BigInt(1) * BigInt(10 ** 18),

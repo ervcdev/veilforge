@@ -84,7 +84,7 @@ contract MatchingTest is Test {
         clob.revealOrder(orderId, price, amount, dir, salt);
     }
 
-    // ─── Tests de Match ────────────────────────────────────────────────────────
+    // ─── Tests of Match ────────────────────────────────────────────────────────
 
     function test_match_crossedSpreadExecutes() public {
         uint256 bidPrice = 3001 * 1e18;
@@ -108,7 +108,7 @@ contract MatchingTest is Test {
 
     function test_match_noMatchWhenSpreadOpen() public {
         uint256 bidPrice = 2990 * 1e18;
-        uint256 askPrice = 3010 * 1e18; // bid < ask → sin cruce → sin match
+        uint256 askPrice = 3010 * 1e18; // bid < ask → no cruce → no match
         uint256 amount   = 1e18;
 
         uint256 bidId = _commit(agent1, bidPrice, amount, CommitRevealCLOB.Direction.BID, keccak256("s1"));
@@ -119,11 +119,11 @@ contract MatchingTest is Test {
         _reveal(agent1, bidId, bidPrice, amount, CommitRevealCLOB.Direction.BID, keccak256("s1"));
         _reveal(agent2, askId, askPrice, amount, CommitRevealCLOB.Direction.ASK, keccak256("s2"));
 
-        // Ambas órdenes deben seguir REVEALED — sin match
+        // Both orders must remain REVEALED — no match
         assertEq(uint8(clob.getOrder(bidId).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
         assertEq(uint8(clob.getOrder(askId).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
 
-        // Arrays de bids y asks deben tener 1 elemento cada uno
+        // Verify that the bid and ask arrays each contain exactly one element
         assertEq(clob.getOpenBids().length, 1);
         assertEq(clob.getOpenAsks().length, 1);
     }
@@ -146,11 +146,11 @@ contract MatchingTest is Test {
         _reveal(agent1, bidId, bidPrice, amount, CommitRevealCLOB.Direction.BID, salt1);
         _reveal(agent2, askId, askPrice, amount, CommitRevealCLOB.Direction.ASK, salt2);
 
-        // Precio de ejecución = midpoint = (3002 + 2998) / 2 = 3000
+        // Execution price = midpoint = (3002 + 2998) / 2 = 3000
         uint256 execPrice = 3000 * 1e18;
         uint256 totalCost = (execPrice * amount) / 1e18; // 3000e18
 
-        // Fee en tokenB = totalCost * 10 / 10000 = 3e18
+        // Fee in tokenB = totalCost * 10 / 10000 = 3e18
         uint256 feeInTokenB = (totalCost * 10) / 10000;
 
         // agent2 debe recibir totalCost - feeInTokenB en tokenB
@@ -164,7 +164,7 @@ contract MatchingTest is Test {
         // Fee en tokenA = amount * 10 / 10000
         uint256 feeInTokenA = (amount * 10) / 10000;
 
-        // agent1 debe recibir amount - feeInTokenA en tokenA
+        // agent1 must receive amount - feeInTokenA in tokenA
         assertApproxEqAbs(
             tokenA.balanceOf(agent1),
             agent1TokenABefore + amount - feeInTokenA,
@@ -176,7 +176,7 @@ contract MatchingTest is Test {
     function test_match_bestBidSelectedAmongMultiple() public {
         uint256 amount = 1e18;
 
-        // 3 bids con precios distintos
+        // 3 bids with distinct prices
         uint256 bidId1 = _commit(agent1, 2990 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b1"));
         uint256 bidId2 = _commit(agent2, 3005 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b2")); // mejor
         uint256 bidId3 = _commit(agent3, 2995 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b3"));
@@ -187,15 +187,15 @@ contract MatchingTest is Test {
         _reveal(agent2, bidId2, 3005 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b2"));
         _reveal(agent3, bidId3, 2995 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b3"));
 
-        // 1 ask que cruce con el mejor bid
+        // 1 ask that crosses with the best bid
         uint256 askId = _commit(agent2, 3000 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a1"));
         vm.roll(block.number + 1);
         _reveal(agent2, askId, 3000 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a1"));
 
-        // bidId2 (precio más alto 3005) debe haber hecho match
+        // bidId2 (highest price 3005) must have matched
         assertEq(uint8(clob.getOrder(bidId2).status), uint8(CommitRevealCLOB.OrderStatus.MATCHED));
 
-        // Los otros bids deben seguir REVEALED
+        // The other bids must remain REVEALED
         assertEq(uint8(clob.getOrder(bidId1).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
         assertEq(uint8(clob.getOrder(bidId3).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
     }
@@ -203,7 +203,7 @@ contract MatchingTest is Test {
     function test_match_bestAskSelectedAmongMultiple() public {
         uint256 amount = 1e18;
 
-        // 3 asks con precios distintos
+        // 3 asks with distinct prices
         uint256 askId1 = _commit(agent1, 3010 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a1"));
         uint256 askId2 = _commit(agent2, 2995 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a2")); // mejor
         uint256 askId3 = _commit(agent3, 3005 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a3"));
@@ -214,15 +214,15 @@ contract MatchingTest is Test {
         _reveal(agent2, askId2, 2995 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a2"));
         _reveal(agent3, askId3, 3005 * 1e18, amount, CommitRevealCLOB.Direction.ASK, keccak256("a3"));
 
-        // 1 bid que cruce con el mejor ask
+        // 1 bid that crosses with the best ask
         uint256 bidId = _commit(agent1, 3000 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b1"));
         vm.roll(block.number + 1);
         _reveal(agent1, bidId, 3000 * 1e18, amount, CommitRevealCLOB.Direction.BID, keccak256("b1"));
 
-        // askId2 (precio más bajo 2995) debe haber hecho match
+        // askId2 (lowest price 2995) must have matched
         assertEq(uint8(clob.getOrder(askId2).status), uint8(CommitRevealCLOB.OrderStatus.MATCHED));
 
-        // Los otros asks deben seguir REVEALED
+        // The other asks must remain REVEALED
         assertEq(uint8(clob.getOrder(askId1).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
         assertEq(uint8(clob.getOrder(askId3).status), uint8(CommitRevealCLOB.OrderStatus.REVEALED));
     }
@@ -240,7 +240,7 @@ contract MatchingTest is Test {
         _reveal(agent1, bidId, 3001 * 1e18, amount, CommitRevealCLOB.Direction.BID, salt1);
         _reveal(agent2, askId, 2999 * 1e18, amount, CommitRevealCLOB.Direction.ASK, salt2);
 
-        // Arrays deben estar vacíos después del match
+        // Arrays must be empty after the match
         assertEq(clob.getOpenBids().length, 0, "openBids debe estar vacio");
         assertEq(clob.getOpenAsks().length, 0, "openAsks debe estar vacio");
     }
@@ -261,7 +261,7 @@ contract MatchingTest is Test {
         _reveal(agent1, bidId, 3001 * 1e18, amount, CommitRevealCLOB.Direction.BID, salt1);
         _reveal(agent2, askId, 2999 * 1e18, amount, CommitRevealCLOB.Direction.ASK, salt2);
 
-        // deployer (feeRecipient) debe haber recibido fees en ambos tokens
+        // deployer (feeRecipient) must have received fees in both tokens
         assertGt(tokenA.balanceOf(deployer), deployerTokenABefore, "No recibio fee en tokenA");
         assertGt(tokenB.balanceOf(deployer), deployerTokenBBefore, "No recibio fee en tokenB");
     }

@@ -18,7 +18,7 @@ contract MockERC20 is ERC20 {
         return _decimals;
     }
 
-    /// @notice Cualquiera puede mintear en testnet para desarrollo y pruebas
+    /// @notice Anyone can mint on testnet for development and testing purposes
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }

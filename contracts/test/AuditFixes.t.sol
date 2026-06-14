@@ -61,8 +61,7 @@ contract AuditFixesTest is Test {
         tokenB.approve(address(clob), type(uint256).max);
     }
 
-    // ─── [FIX C-1 + GAP-4] Fees llegan al feeRecipient en ambos tokens ─────────
-
+// ─── [FIX C-1 + GAP-4] Fees are sent to the feeRecipient in both tokens ───
     function test_feesReachRecipientInBothTokens() public {
         uint256 price = 3000 * 1e18;
         uint256 amount = 1e18;
@@ -126,7 +125,7 @@ contract AuditFixesTest is Test {
         );
     }
 
-    // ─── [FIX C-3] expireOrder sin keeper NO hace slash ──────────────────────────
+  // ─── [FIX C-3] expireOrder without a keeper does NOT execute a slash ───────
 
     function test_expireOrderNoSlashWithoutKeeper() public {
         bytes32 salt = keccak256("salt");
@@ -142,7 +141,7 @@ contract AuditFixesTest is Test {
         vm.prank(agent1);
         clob.commitOrder(commitment);
 
-        // Avanzar más allá del reveal window + grace period
+        // Advance beyond the reveal window + grace period
         vm.roll(block.number + 60);
 
         AgentRegistry.Agent memory agentBefore = registry.getAgent(agent1);
@@ -152,21 +151,21 @@ contract AuditFixesTest is Test {
         assertEq(
             agentAfter.slashCount,
             slashCountBefore,
-            "[C-3] Atacante no debe poder slash al agente"
+            "[C-3] Attacker must not be able to slash the agent"
         );
 
-        // Atacante llama expireOrder — no debería slash
+        // Attacker calls expireOrder — should not slash
         vm.prank(attacker);
         clob.expireOrder(1);
 
-        // slashCount no debe haber cambiado
+        // slashCount should not have changed
         assertEq(
             registry.getAgent(agent1).slashCount,
             slashCountBefore,
             "[C-3] Atacante no debe poder slash al agente"
         );
 
-        // La orden sí debe estar EXPIRED
+        // The order must be EXPIRED
         assertEq(
             uint8(clob.getOrder(1).status),
             uint8(CommitRevealCLOB.OrderStatus.EXPIRED),
@@ -174,8 +173,7 @@ contract AuditFixesTest is Test {
         );
     }
 
-    // ─── [FIX H-2] activeOrders se decrementa correctamente ──────────────────────
-
+    // ─── [FIX H-2] activeOrders is correctly decremented ──────────────────────────
     function test_activeOrdersDecrementOnReveal() public {
         uint256 price = 3000 * 1e18;
         uint256 amount = 1e18;
@@ -219,7 +217,7 @@ contract AuditFixesTest is Test {
             "activeOrders debe ser 0 despues del reveal"
         );
 
-        // Verificar que puede retirar colateral (activeOrders == 0)
+        // Verify that collateral can be withdrawn (activeOrders == 0)
         AgentRegistry.Agent memory agentData = registry.getAgent(agent1);
         uint256 colateral = agentData.collateral;
         uint256 retiro = colateral - registry.MIN_COLLATERAL();
@@ -229,7 +227,7 @@ contract AuditFixesTest is Test {
         }
     }
 
-    // ─── [FIX GAP-4] Fees calculados en unidades correctas ──────────────────────
+    // ─── [FIX GAP-4] Fees are calculated in the correct units ───────────────────
 
     function test_feeUnitsAreCorrect() public {
         uint256 price = 3000 * 1e18;
@@ -285,7 +283,7 @@ contract AuditFixesTest is Test {
         uint256 totalCost = (price * amount) / 1e18;
         uint256 feeInTokenB = (totalCost * 10) / 10000;
 
-        // agent2 debe recibir totalCost - feeInTokenB en tokenB
+        // agent2 must receive totalCost - feeInTokenB in tokenB
         assertApproxEqAbs(
             tokenB.balanceOf(agent2),
             agent2TokenBBefore + totalCost - feeInTokenB,
@@ -296,7 +294,7 @@ contract AuditFixesTest is Test {
         // feeInTokenA = amount * 10 / 10000
         uint256 feeInTokenA = (amount * 10) / 10000;
 
-        // agent1 debe recibir amount - feeInTokenA en tokenA
+        // agent1 must receive amount - feeInTokenA in tokenA
         assertApproxEqAbs(
             tokenA.balanceOf(agent1),
             agent1TokenABefore + amount - feeInTokenA,
@@ -305,12 +303,12 @@ contract AuditFixesTest is Test {
         );
     }
 
-    // ─── [FIX C-2] Arrays se limpian — sin DOS ───────────────────────────────────
+    // ─── [FIX C-2] Arrays are cleared — preventing DOS ─────────────────────────
 
     function test_expiredOrdersCleanedFromArrays() public {
         uint256 amount = 1e18;
 
-        // Commit y reveal de una orden BID
+        // Commit and reveal of a BID order
         bytes32 salt1 = keccak256("s1");
         bytes32 c1 = keccak256(
             abi.encodePacked(
@@ -334,7 +332,7 @@ contract AuditFixesTest is Test {
             salt1
         );
 
-        // Commit de una segunda orden — expira sin revelar
+        // Commit of a second order — expires without revealing
         bytes32 salt2 = keccak256("s2");
         bytes32 c2 = keccak256(
             abi.encodePacked(
@@ -352,7 +350,7 @@ contract AuditFixesTest is Test {
         vm.prank(deployer);
         clob.expireOrder(2);
 
-        // Poner un ASK que cruce con el BID válido (primera orden)
+        // Place an ASK that matches the valid BID (first order)
         bytes32 salt3 = keccak256("s3");
         bytes32 c3 = keccak256(
             abi.encodePacked(
@@ -376,8 +374,8 @@ contract AuditFixesTest is Test {
             salt3
         );
 
-        // El matching debe funcionar a pesar de la orden expirada en el array
-        // bid1 (REVEALED) debe haber hecho match con el ask
+        // Matching must work despite the expired order in the array
+        // bid1 (REVEALED) must have matched with the ask
         assertEq(
             uint8(clob.getOrder(1).status),
             uint8(CommitRevealCLOB.OrderStatus.MATCHED),
@@ -385,8 +383,7 @@ contract AuditFixesTest is Test {
         );
     }
 
-    // ─── [FIX H-2] Withdraw bloqueado con ordenes activas ────────────────────────
-
+    // ─── [FIX H-2] Withdrawal blocked while orders are active ─────────────────────
     function test_withdrawBlockedWithActiveOrders() public {
         bytes32 salt = keccak256("salt");
         bytes32 commitment = keccak256(
@@ -401,7 +398,7 @@ contract AuditFixesTest is Test {
         vm.prank(agent1);
         clob.commitOrder(commitment);
 
-        // Intentar retirar colateral con una orden activa
+        // Attempt to withdraw collateral with an active order
         vm.prank(agent1);
         vm.expectRevert("Has active orders pending");
         registry.withdrawCollateral(0.001 ether);

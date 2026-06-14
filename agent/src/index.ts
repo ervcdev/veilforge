@@ -13,11 +13,11 @@ import { getArbitrageParams }     from './strategies/arbitrage'
 import { getConservativeParams }  from './strategies/conservative'
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') })
-// ─── Config Corregida (Autodetección de Wallet según Estrategia) ────────────────
+// ─── Corrected Config (Wallet Autodetection by Strategy) ────────────────
 
 const STRATEGY = process.env.AGENT_STRATEGY || 'marketMaker'
 
-// Mapea automáticamente cada estrategia a su llave correspondiente
+// Automatically maps each strategy to its corresponding key
 let AGENT_INDEX = 1
 if (STRATEGY === 'arbitrage') AGENT_INDEX = 2
 if (STRATEGY === 'conservative') AGENT_INDEX = 3
@@ -45,18 +45,18 @@ async function runAgent() {
   console.log(`  Address:    ${account.address}`)
   console.log(`══════════════════════════════════════════\n`)
 
-  // Setup: register + approve tokens (con receipts — fix A-3)
+  // Setup: register + approve tokens (with receipts — fix A-3)
   await setupAgent(walletClient, publicClient, account)
 
-  let ciclo = 0
+  let cycle = 0
 
   while (true) {
-    ciclo++
-    console.log(`[${account.address.slice(0, 6)}] ── Ciclo #${ciclo} ──`)
+    cycle++
+    console.log(`[${account.address.slice(0, 6)}] ── Cycle #${cycle} ──`)
 
     try {
-      // 1. Calcular parámetros según estrategia
-      // [FIX A-4] pasar publicClient a getArbitrageParams
+      // 1. Calculate parameters based on strategy
+      // [FIX A-4] pass publicClient to getArbitrageParams
       let params
       switch (STRATEGY) {
         case 'arbitrage':
@@ -72,54 +72,53 @@ async function runAgent() {
       // 2. Commit
       const committed = await commitOrder(walletClient, publicClient, account, params)
 
-      // 3. Esperar ventana — lanza error si expira (fix A-2)
+      // 3. Wait for window — throws an error if expired (fix A-2)
       await waitForRevealWindow(publicClient, committed.commitBlock, account)
 
       // 4. Reveal
       await revealOrder(walletClient, publicClient, account, committed)
 
-      console.log(`[${account.address.slice(0, 6)}] ✓ Ciclo #${ciclo} completado\n`)
+      console.log(`[${account.address.slice(0, 6)}] ✓ Cycle #${cycle} completed\n`)
 
     } catch (err: any) {
-      console.error(`[${account.address.slice(0, 6)}] ✗ Error ciclo #${ciclo}: ${err.message}`)
+      console.error(`[${account.address.slice(0, 6)}] ✗ Error in cycle #${cycle}: ${err.message}`)
 
-      // [FIX GAP-5] backoff según tipo de error — evita loop de slashing
-      if (err.message.includes('Reveal window expiró')) {
-        console.warn(`[${account.address.slice(0, 6)}] ⚠ Ventana expirada — esperando 15s`)
+      // [FIX GAP-5] backoff based on error type — prevents slashing loop
+      if (err.message.includes('Reveal window expired')) {
+        console.warn(`[${account.address.slice(0, 6)}] ⚠ Window expired — waiting 15s`)
         await sleep(15_000)
         continue
       }
 
       if (err.message.includes('nonce') || err.message.includes('network')) {
-        console.warn(`[${account.address.slice(0, 6)}] ⚠ Error de red — esperando 5s`)
+        console.warn(`[${account.address.slice(0, 6)}] ⚠ Network error — waiting 5s`)
         await sleep(5_000)
         continue
       }
 
-      // Error desconocido — pausa corta y continuar
+      // Unknown error — short backoff and continue
       await sleep(2_000)
     }
 
-    // Pausa normal entre ciclos
+    // Standard delay between cycles
     await sleep(3_000)
   }
 }
-
-// ─── Manejo de errores globales ───────────────────────────────────────────────
+// ─── Global Error Handling ───────────────────────────────────────────────────
 
 process.on('uncaughtException', (err) => {
-  console.error('Error no capturado:', err)
+  console.error('Uncaught Exception:', err)
   process.exit(1)
 })
 
 process.on('unhandledRejection', (reason) => {
-  console.error('Promise rechazada:', reason)
+  console.error('Unhandled Rejection (Rejected Promise):', reason)
   process.exit(1)
 })
 
-// ─── Arrancar ─────────────────────────────────────────────────────────────────
+// ─── Startup ─────────────────────────────────────────────────────────────────
 
 runAgent().catch((err) => {
-  console.error('Error fatal:', err)
+  console.error('Fatal Error:', err)
   process.exit(1)
 })

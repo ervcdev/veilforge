@@ -10,8 +10,8 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
     // ─── Structs ───────────────────────────────────────────────────────────────
 
     struct Agent {
-        // Slot 0 — empaquetado [FIX H-1]
-        uint64  registeredAt;    // timestamp — uint64 aguanta hasta año 2554
+        // Slot 0 — packed storage [FIX H-1]
+        uint64  registeredAt;    // timestamp — uint64 supports up to year 2554
         uint64  slashCount;      // max 1.8×10^19 slashes
         uint64  ordersExecuted;  // max 1.8×10^19 órdenes
         bool    registered;      // 1 byte
@@ -99,22 +99,22 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
         emit CollateralDeposited(msg.sender, msg.value);
     }
 
-    /// @notice Retirar colateral
-    /// [FIX V2] Permite retiro total (salida del sistema) o mantener MIN_COLLATERAL.
-    /// El bug anterior bloqueaba a agentes que depositaron exactamente MIN_COLLATERAL.
+    /// @notice Withdraw collateral
+    /// [FIX V2] Allows full withdrawal (system exit) or maintaining MIN_COLLATERAL.
+    /// The previous bug locked agents who deposited exactly MIN_COLLATERAL.
     function withdrawCollateral(uint256 amount) external  onlyRegistered {
         require(activeOrders[msg.sender] == 0,           "Has active orders pending");
         require(agents[msg.sender].collateral >= amount,  "Insufficient collateral");
 
         uint256 remaining = agents[msg.sender].collateral - amount;
 
-        // [FIX V2] permitir retiro total (remaining == 0) o mantener el mínimo
+        // [FIX V2] Allow full withdrawal (remaining == 0) or maintaining the minimum required
         require(
             remaining == 0 || remaining >= MIN_COLLATERAL,
             "Leave 0 (full exit) or keep at least MIN_COLLATERAL"
         );
 
-        // Si retira todo → desregistrar automáticamente
+       // If total withdrawal -> trigger automatic unregistration
         if (remaining == 0) {
             agents[msg.sender].registered = false;
             emit AgentDeregistered(msg.sender);
@@ -140,8 +140,8 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
 
     // ─── Called by CLOB — Slash & Stats ────────────────────────────────────────
 
-    /// @notice Penalizar agente por no revelar su orden a tiempo
-    /// IMPORTANTE: el CLOB llama decrementActiveOrders ANTES de llamar slashAgent
+    /// @notice Slash an agent for failing to reveal their order on time
+    /// CRITICAL: the CLOB calls decrementActiveOrders BEFORE calling slashAgent
     function slashAgent(address agent, string calldata reason) external onlyCLOB {
         require(agents[agent].registered, "Agent not registered");
 
@@ -156,7 +156,7 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
         emit AgentSlashed(agent, slash, reason);
     }
 
-    /// @notice Actualizar stats después de un match exitoso
+    /// @notice Update stats after a successful match
     function updateStats(
         address agent,
         uint256 volume,

@@ -1,6 +1,6 @@
 import { type OrderParams, type Direction } from '../commitReveal'
 
-// Spread más amplio y montos más pequeños que el market maker
+// Wider spread and smaller amounts compared to the market maker
 let lastDirection = 0
 
 export function getConservativeParams(): OrderParams {

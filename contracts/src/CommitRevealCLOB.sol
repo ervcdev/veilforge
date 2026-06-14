@@ -65,7 +65,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
         uint256         blockNumber
     );
 
-    // [FIX M-1] reordenado
+    // [FIX M-1] reordered
     event OrderMatched(
         uint256 indexed bidId,
         uint256 indexed askId,
@@ -156,7 +156,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
         order.status      = OrderStatus.REVEALED;
         order.revealBlock = block.number;
 
-        // [FIX GAP-2] decrementar ANTES del emit
+        // [FIX GAP-2] decrement BEFORE emitting event
         registry.decrementActiveOrders(msg.sender);
 
         if (direction == Direction.BID) {
@@ -197,7 +197,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
 
         _settle(bid.agent, ask.agent, execPrice, execAmount);
 
-        // Calcular fees en sus unidades para el evento
+        // Calculate fees in their respective units for the event
         uint256 totalCost   = (execPrice * execAmount) / 1e18;
         uint256 feeInTokenB = (totalCost  * FEE_BPS) / BPS_DENOMINATOR;
         uint256 feeInTokenA = (execAmount * FEE_BPS) / BPS_DENOMINATOR;
@@ -236,7 +236,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
                             ? protocolFeeRecipient
                             : owner();
 
-        // [FIX GAP-4] fee independiente en cada token
+        // [FIX GAP-4] independent fee for each token
         uint256 feeInTokenB = (totalCost  * FEE_BPS) / BPS_DENOMINATOR;
         uint256 feeInTokenA = (execAmount * FEE_BPS) / BPS_DENOMINATOR;
 
@@ -276,7 +276,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
 
         order.status = OrderStatus.EXPIRED;
 
-        // [FIX GAP-2] decrementar PRIMERO, slash DESPUÉS
+        // [FIX GAP-2] decrement FIRST, slash AFTER
         registry.decrementActiveOrders(order.agent);
 
         emit OrderExpired(orderId, order.agent, block.number);
@@ -329,7 +329,7 @@ contract CommitRevealCLOB is ReentrancyGuard, Ownable {
         arr.pop();
     }
 
-    // ─── Helper para agentes ───────────────────────────────────────────────────
+    // ─── Agent helper function ───────────────────────────────────────────────────
 
     function hashOrder(
         uint256   price,

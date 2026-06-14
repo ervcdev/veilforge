@@ -23,7 +23,7 @@
 > 33 security issues identified and resolved across 4 audit rounds.  
 > Deployed on Somnia Testnet — June 2026.
 
-[Live Demo](https://veilforge-frontend.vercel.app/) · [Demo Video](https://m.youtube.com/watch?v=tPMzbK9nwuM) · [Presentation](https://docs.google.com/presentation/d/e/2PACX-1vQcm3of1CCdKk1v6DjlOC4rg41hpG-K6TWfbnSXmsdl7lZYPWGG7Qv2FNXMTgfgl3Fvj5IItS4amfiA/pub?start=false&loop=false&delayms=3000) · [Audit Page](https://veilforge-frontend.vercel.app/audit)
+[Live Demo](https://veilforge-frontend.vercel.app/) · [Demo Video](https://m.youtube.com/watch?v=tPMzbK9nwuM) · [Explorer](https://shannon-explorer.somnia.network/address/0x05f27223bBe02B3CC5c2F5d61DA8902811f5d207) · [Audit Page](https://veilforge-frontend.vercel.app/audit)
 
 
 </div>
@@ -41,7 +41,7 @@ Every component runs onchain on Somnia.
 
 ## The Problem
 
-Every onchain orderbook has the same fundamental flaw: orders are public the moment they are submitted. Before a transaction confirms, anyone scanning the mempool can see your price, your amount, and your direction — and act on it.
+Every onchain orderbook has the same fundamental flaw: orders are public the moment they are submitted. Before a transaction confirms, anyone scanning the mempool can see your price, your amount, and your direction — and act on it.RPC 
 
 MEV bots exploit this in two ways. **Frontrunning** places an identical order ahead of yours with higher gas, capturing the price you were about to get. **Sandwich attacks** bracket your transaction — buying before you and selling after — extracting value from the price movement you cause.
 
@@ -100,55 +100,55 @@ RESULT
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    AUTONOMOUS AGENTS (TypeScript)                    │
 │                                                                      │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────────┐  │
+│  ┌────────────-─────┐  ┌────-──────────────┐  ┌───────────────────┐  │
 │  │ Agent-1          │  │ Agent-2           │  │ Agent-3           │  │
 │  │ Market Maker     │  │ Arbitrage         │  │ Conservative      │  │
 │  │ spread 0.20-0.35%│  │ spread 0.15-0.40% │  │ spread 0.60-0.80% │  │
 │  └────────┬─────────┘  └────────┬──────────┘  └────────┬──────────┘  │
-│           └───────────────────┬─┘────────────────────┘              │
-│                               │ RPC calls                            │
+│           └───────────────────┬─┘──────-─────-─────────┘             │
+│                           RPC │ calls                                │
 └───────────────────────────────┼──────────────────────────────────────┘
                                 │
 ┌───────────────────────────────┼──────────────────────────────────────┐
 │                    SOMNIA TESTNET (Chain ID 50312)                   │
 │                               ▼                                      │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                   CommitRevealCLOB.sol                         │  │
-│  │  0x05f27223bBe02B3CC5c2F5d61DA8902811f5d207                   │  │
-│  │                                                               │  │
-│  │  commitOrder()  ──► hash stored onchain                       │  │
-│  │  revealOrder()  ──► hash verified + order added to book       │  │
-│  │  matchOrders()  ──► best bid × best ask → settlement          │  │
-│  └──────────┬────────────────────────────┬────────────────────┘  │  │
-│             │                            │                         │  │
-│   Reactivity│                      invoke│                         │  │
-│   subscription                     agents                          │  │
-│             ▼                            ▼                         │  │
-│  ┌──────────────────┐     ┌──────────────────────────────────┐   │  │
-│  │ ReactivityAdapter│     │        Somnia Agents              │   │  │
-│  │ 0x93f859...      │     │  JSON API → live market price     │   │  │
-│  │                  │     │  LLM     → pricing strategy       │   │  │
-│  │ OrderRevealed    │     └──────────────────────────────────┘   │  │
-│  │ → matchOrders()  │                                             │  │
-│  │ (same block)     │     ┌──────────────────────────────────┐   │  │
-│  └──────────────────┘     │       Cron Subscriptions          │   │  │
-│                           │  auto-expire uncommitted orders   │   │  │
-│  ┌──────────────────┐     └──────────────────────────────────┘   │  │
-│  │  AgentRegistry   │                                             │  │
-│  │  0x22b471...     │                                             │  │
-│  │  collateral      │                                             │  │
-│  │  slash / reward  │                                             │  │
-│  └──────────────────┘                                             │  │
+│  ┌────────────────────────────────────────────────────────────┐      │
+│  │                   CommitRevealCLOB.sol                     │      │
+│  │  0x05f27223bBe02B3CC5c2F5d61DA8902811f5d207                │      │
+│  │                                                            │      │
+│  │  commitOrder()  ──► hash stored onchain                    │      │
+│  │  revealOrder()  ──► hash verified + order added to book    │      │
+│  │  matchOrders()  ──► best bid × best ask → settlement       │      │
+│  └──────────┬────────────────────────────┬────────────────────┘      │
+│             │                            │                           │
+│   Reactivity│                      invoke│                           │
+│   subscription                     agents                            │
+│             ▼                            ▼                           │
+│  ┌──────────────────┐     ┌──────────────────────────────-────┐      │
+│  │ ReactivityAdapter│     │        Somnia Agents              │      │
+│  │ 0x93f859...      │     │  JSON API → live market price     │      │  
+│  │                  │     │  LLM     → pricing strategy       │      │
+│  │ OrderRevealed    │     └────────────────────────-──────────┘      │
+│  │ → matchOrders()  │                                                │
+│  │ (same block)     │     ┌────────────────────────────-──────┐      │
+│  └──────────────────┘     │       Cron Subscriptions          │      │
+│                           │  auto-expire uncommitted orders   │      │
+│  ┌──────────────────┐     └─────────────────────────────-─────┘      │
+│  │  AgentRegistry   │                                                │
+│  │  0x22b471...     │                                                │
+│  │  collateral      │                                                │
+│  │  slash / reward  │                                                │
+│  └──────────────────┘                                                │
 └───────────────────────────────┬──────────────────────────────────────┘
-                                │ WebSocket events
+                     WebSocket  │  events
 ┌───────────────────────────────┼──────────────────────────────────────┐
 │                    FRONTEND (Next.js + Vercel)                       │
 │                               ▼                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │  Real-time Dashboard                                           │ │
-│  │  commits → reveals → matches · live in milliseconds           │ │
-│  │  Agent heatmap · Swap widget · Transaction ticker · /audit    │ │
-│  └────────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │  Real-time Dashboard                                           │  │
+│  │  commits → reveals → matches · live in milliseconds            │  │
+│  │  Agent heatmap · Swap widget · Transaction ticker · /audit     │  │
+│  └────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -245,7 +245,7 @@ See [AGENTS.md](AGENTS.md) for full strategy documentation.
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/veilforge
+git clone https://github.com/ervcdev/veilforge
 cd veilforge
 npm install
 ```
@@ -413,7 +413,7 @@ veilforge/
 | Resource | URL |
 |---|---|
 | Live Demo | https://veilforge.vercel.app |
-| Demo Video | https://youtu.be/YOUR_VIDEO_ID |
+| Demo Video | https://m.youtube.com/watch?v=tPMzbK9nwuM |
 | Audit Page | https://veilforge.vercel.app/audit |
 | CLOB Explorer | https://shannon-explorer.somnia.network/address/0x05f27223bBe02B3CC5c2F5d61DA8902811f5d207 |
 | Agent Strategies | [AGENTS.md](AGENTS.md) |

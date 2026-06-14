@@ -1,6 +1,6 @@
 import { type OrderParams, type Direction } from '../commitReveal'
 
-// Precio base simulado — en producción reemplazar con precio de Somnia JSON API Agent
+// Simulated base price — in production replace with Somnia JSON API Agent price
 let basePrice = BigInt(3000) * BigInt(10 ** 18)  // 3000 USDC en 18 decimals
 
 export function getMarketPrice(): bigint {
@@ -37,7 +37,7 @@ export function calculateAskParams(): OrderParams {
   }
 }
 
-// Alterna entre BID y ASK cada ciclo
+// Alternates between BID and ASK every cycle
 let lastDirection = 1
 
 export function getNextOrderParams(): OrderParams {

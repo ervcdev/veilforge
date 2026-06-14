@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 import "./CommitRevealCLOB.sol";
 
-/// @notice Adaptador que recibe callbacks de Somnia Reactivity
-/// y dispara el matching automáticamente.
-/// devMode = true durante el hackathon por si el precompile
-/// no está activo en Shannon Testnet.
+/// @notice Adapter that receives callbacks from Somnia Reactivity
+/// and automatically triggers matching.
+/// devMode = true during the hackathon in case the precompile
+/// is not active on Shannon Testnet.
 contract ReactivityAdapter {
 
     CommitRevealCLOB public clob;
@@ -36,8 +36,8 @@ contract ReactivityAdapter {
         devMode              = true; // activo por default para el hackathon
     }
 
-    /// @notice Callback llamado por Somnia Reactivity cuando
-    /// se emite el evento OrderRevealed en CommitRevealCLOB
+    /// @notice Callback called by Somnia Reactivity when
+    /// the OrderRevealed event is emitted in CommitRevealCLOB
     function handleOrderRevealed(bytes calldata eventData) external onlyReactivity {
         (uint256 orderId,,,,,) = abi.decode(
             eventData,
@@ -47,7 +47,7 @@ contract ReactivityAdapter {
         clob.matchOrders();
     }
 
-    /// @notice Fallback para cuando Reactivity pasa datos adicionales
+    /// @notice Fallback for when Reactivity passes additional data
     function handleEvent(bytes calldata) external onlyReactivity {
         clob.matchOrders();
     }
@@ -62,7 +62,7 @@ contract ReactivityAdapter {
         reactivityPrecompile = _addr;
     }
 
-    /// @notice Info para registrar la suscripción via Somnia Reactivity SDK
+    /// @notice Info to register the subscription via Somnia Reactivity SDK
     function getSubscriptionInfo() external view returns (
         address watchedContract,
         bytes32 watchedEventSig,

@@ -44,7 +44,7 @@ contract CommitRevealTest is Test {
 
         vm.stopPrank();
 
-        // Registrar agentes con colateral
+        // Register agents with collateral
         vm.deal(agent1, 1 ether);
         vm.prank(agent1);
         registry.registerAgent{value: 0.01 ether}();
@@ -53,7 +53,7 @@ contract CommitRevealTest is Test {
         vm.prank(agent2);
         registry.registerAgent{value: 0.01 ether}();
 
-        // Approve tokens al CLOB
+        // Approve tokens to the CLOB
         vm.prank(agent1);
         tokenA.approve(address(clob), type(uint256).max);
         vm.prank(agent1);
@@ -142,7 +142,7 @@ contract CommitRevealTest is Test {
         assertEq(registry.activeOrders(agent1), 1);
     }
 
-    // ─── Tests de Reveal ───────────────────────────────────────────────────────
+    // ─── Tests of Reveal ───────────────────────────────────────────────────────
 
     function test_revealOrder_succeedsWithCorrectParams() public {
         bytes32 salt       = keccak256("salt1");
@@ -198,7 +198,7 @@ contract CommitRevealTest is Test {
         vm.prank(agent1);
         uint256 orderId = clob.commitOrder(commitment);
 
-        // NO avanzar bloque — revelar en el mismo bloque
+        // DO NOT advance block — reveal within the same block
         vm.prank(agent1);
         vm.expectRevert("Too early to reveal");
         clob.revealOrder(orderId, PRICE, AMOUNT, CommitRevealCLOB.Direction.BID, salt);
@@ -228,7 +228,7 @@ contract CommitRevealTest is Test {
 
         vm.roll(block.number + 1);
 
-        // agent2 intenta revelar la orden de agent1
+        // agent2 attempts to reveal agent1's order
         vm.prank(agent2);
         vm.expectRevert("Not your order");
         clob.revealOrder(orderId, PRICE, AMOUNT, CommitRevealCLOB.Direction.BID, salt);
@@ -265,7 +265,7 @@ contract CommitRevealTest is Test {
         assertEq(asks.length, 1);
     }
 
-    // ─── Tests de Expire ───────────────────────────────────────────────────────
+    // ─── Tests of Expire ───────────────────────────────────────────────────────
 
     function test_expireOrder_setsStatusExpired() public {
         bytes32 salt       = keccak256("salt");
@@ -274,10 +274,11 @@ contract CommitRevealTest is Test {
         vm.prank(agent1);
         uint256 orderId = clob.commitOrder(commitment);
 
-        // Avanzar más allá del reveal window + grace period
+        // Advance beyond the reveal window + grace period
         vm.roll(block.number + 52);
 
-        vm.prank(deployer); // deployer es el keeper
+        // deployer is the keeper
+        vm.prank(deployer); 
         clob.expireOrder(orderId);
 
         CommitRevealCLOB.Order memory order = clob.getOrder(orderId);
@@ -291,7 +292,7 @@ contract CommitRevealTest is Test {
             _makeCommitment(PRICE, AMOUNT, CommitRevealCLOB.Direction.BID, salt)
         );
 
-        // Avanzar solo 3 bloques — ventana no cerrada
+        // Advance only 3 blocks — window not closed
         vm.roll(block.number + 3);
 
         vm.expectRevert("Grace period still active");
