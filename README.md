@@ -286,18 +286,56 @@ COLLATERAL_AMOUNT=0.01
 
 ### 4. Deploy to Somnia Testnet
 
+> **Note:** Somnia Testnet requires deploying contracts individually
+> due to gas propagation behavior. Use `forge create` for each contract.
+
 ```bash
-cd contracts
-source .env
-forge script script/Deploy.s.sol:Deploy \
-  --rpc-url $SOMNIA_RPC_URL \
+# 1. MockWETH
+forge create src/MockERC20.sol:MockERC20 \
+  --rpc-url https://dream-rpc.somnia.network \
   --private-key $DEPLOYER_PRIVATE_KEY \
   --broadcast \
   --legacy \
-  -vvv
+  --gas-price 6000000000 \
+  --constructor-args "Wrapped ETH Mock" "WETH" 18
+
+# 2. MockUSDC
+forge create src/MockERC20.sol:MockERC20 \
+  --rpc-url https://dream-rpc.somnia.network \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast \
+  --legacy \
+  --gas-price 6000000000 \
+  --constructor-args "USD Coin Mock" "USDC" 18
+
+# 3. AgentRegistry
+forge create src/AgentRegistry.sol:AgentRegistry \
+  --rpc-url https://dream-rpc.somnia.network \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast \
+  --legacy \
+  --gas-price 6000000000
+
+# 4. CommitRevealCLOB (reemplazar con addresses reales)
+forge create src/CommitRevealCLOB.sol:CommitRevealCLOB \
+  --rpc-url https://dream-rpc.somnia.network \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast \
+  --legacy \
+  --gas-price 6000000000 \
+  --constructor-args REGISTRY_ADDRESS TOKEN_A_ADDRESS TOKEN_B_ADDRESS
+
+# 5. ReactivityAdapter
+forge create src/ReactivityAdapter.sol:ReactivityAdapter \
+  --rpc-url https://dream-rpc.somnia.network \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast \
+  --legacy \
+  --gas-price 6000000000 \
+  --constructor-args CLOB_ADDRESS 0x0100
 ```
 
----
+After each deploy, save the `Deployed to:` address and use it in the next command.
 
 ## Running the Agents
 
