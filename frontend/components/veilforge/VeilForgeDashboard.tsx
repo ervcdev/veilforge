@@ -453,7 +453,7 @@ export default function VeilForgeDashboard() {
         const event: TickerEvent = {
           id: generateId(),
           type: 'commit',
-          text: `Agent ${agentShort} committed · ${hash}`,
+          text: `Agent ${agentShort} committed — ${hash}`,
           timestamp: Date.now(),
         }
         return [event, ...prev].slice(0, 20)
@@ -516,7 +516,7 @@ export default function VeilForgeDashboard() {
           const event: TickerEvent = {
             id: generateId(),
             type: 'reveal',
-            text: `${agentShort} revealed ${direction} ${amount.toFixed(2)} WETH @ ${price.toFixed(0)} USDC`,
+            text: `Agent ${agentShort} revealed ${direction} ${amount.toFixed(2)} WETH @ ${price.toFixed(0)} USDC`,
             timestamp: Date.now(),
           }
           return [event, ...prev].slice(0, 20)
@@ -557,7 +557,7 @@ export default function VeilForgeDashboard() {
               const event: TickerEvent = {
                 id: generateId(),
                 type: 'match',
-                text: `MATCH ${bid.agentShort} ↔ ${ask.agentShort} — ${fillAmount.toFixed(2)} WETH @ ${fillPrice.toFixed(0)} USDC`,
+                text: `⚡ MATCH ${bid.agentShort} ↔ ${ask.agentShort} — ${fillAmount.toFixed(2)} WETH @ ${fillPrice.toFixed(0)} USDC`,
                 timestamp: Date.now(),
               }
               return [event, ...t].slice(0, 20)
@@ -689,6 +689,11 @@ export default function VeilForgeDashboard() {
           100% { background: #111118; box-shadow: inset 0 0 0 rgba(0, 212, 255, 0); }
         }
         .row-glow { animation: reveal-glow 400ms ease-out forwards; }
+        @keyframes swap-pulse-bg {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.5); }
+          50% { box-shadow: 0 0 0 6px rgba(0, 212, 255, 0); }
+        }
+        .swap-pulse-btn { animation: swap-pulse-bg 2.5s ease-in-out infinite; }
       `}</style>
 
       {showBanner && (
@@ -716,14 +721,22 @@ export default function VeilForgeDashboard() {
 
       <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
         {/* TOP BAR */}
-        <div className="h-12 flex items-center justify-between px-4" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
-          <div className="font-mono-jetbrains font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
+        <div className="h-12 flex items-center justify-between px-6" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <polygon points="8,1 15,4.5 15,11.5 8,15 1,11.5 1,4.5" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
+            </svg>
+            <div className="font-mono-jetbrains font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
+          </div>
+          {/* Network */}
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-yellow-400 animate-pulse'}`} />
-            <span className="text-sm" style={{ color: '#666680' }}>
+            <span className="text-sm font-mono-jetbrains" style={{ color: '#666680' }}>
               {isConnected ? 'SOMNIA TESTNET' : 'DEMO MODE'}
             </span>
           </div>
+          {/* Right cluster */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span
@@ -753,19 +766,23 @@ export default function VeilForgeDashboard() {
               </span>
             </div>
             <span style={{ color: '#1a1a2e' }}>|</span>
-            <span className="text-xs" style={{ color: '#00d4ff' }}>
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#00d4ff' }}>
               {onchainAgents.length > 0 ? `${onchainAgents.length} AGENTS ACTIVE` : '3 AGENTS ACTIVE'}
             </span>
+            <span style={{ color: '#1a1a2e' }}>|</span>
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>◈ MEV PROTECTED</span>
             <Link
               href="/audit"
-              className="font-mono-jetbrains text-xs px-2 py-1 rounded border transition-colors"
+              className="font-mono-jetbrains text-xs px-2 py-1 rounded border transition-all"
               style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
+                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
+                ;(e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
                 ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#00d4ff'
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.color = '#666680'
+                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
+                ;(e.currentTarget as HTMLAnchorElement).style.color = '#666680'
                 ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#1a1a2e'
               }}
             >
@@ -775,11 +792,11 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* ── IMPROVEMENT 2 — METRICS BAR ── */}
-        <div className="flex gap-3 p-3" style={{ background: '#0a0a0f' }}>
+        <div className="flex gap-4 p-4" style={{ background: '#0a0a0f' }}>
           {metricItems.map(metric => (
             <div
               key={metric.key}
-              className="flex-1 rounded p-3 flex flex-col"
+              className="flex-1 rounded p-4 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid #1a1a2e', borderTopColor: 'rgba(0, 212, 255, 0.2)' }}
             >
               <div className="text-xs uppercase leading-tight tracking-widest" style={{ color: '#666680' }}>
@@ -794,15 +811,15 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* THREE PANELS */}
-        <div className="flex-1 flex gap-3 px-3 pb-0 overflow-hidden">
+        <div className="flex-1 flex gap-6 px-6 pb-0 overflow-hidden">
           {/* ── LEFT PANEL — COMMITS & REVEALS ── */}
-          <div className="w-[40%] flex flex-col gap-3">
+          <div className="w-[40%] flex flex-col gap-6">
 
             {/* COMMITS */}
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: '#1a1a2e' }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: '#666680' }}>COMMITS</span>
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#1a1a2e', color: '#00d4ff' }}>{displayCommits.length}</span>
+              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+                <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
+                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
               </div>
               <div className="flex-1 overflow-hidden">
                 {displayCommits.length === 0 ? (
@@ -828,12 +845,12 @@ export default function VeilForgeDashboard() {
                         return (
                           <tr
                             key={commit.id}
-                            className={commit.isNew ? 'row-enter' : ''}
+                            className={`${commit.isNew ? 'row-enter' : ''} hover:bg-[#0d0d14] transition-colors`}
                             style={{
                               background: '#111118',
                               borderBottom: '1px solid #1a1a2e',
                               opacity: faded ? 0.6 : 1,
-                              transition: 'opacity 600ms ease',
+                              transition: 'opacity 600ms ease, background-color 150ms ease',
                             }}
                           >
                             <td className="p-2 font-mono-jetbrains text-xs w-28" style={{ color: '#666680' }}>{commit.agentShort}</td>
@@ -866,9 +883,10 @@ export default function VeilForgeDashboard() {
             
             {/* REVEALS */}
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: '#1a1a2e' }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: '#666680' }}>REVEALS</span>
-                <span className="text-xs px-2 py-0.5 rounded font-mono-jetbrains" style={{ background: '#1a1a2e' }}>
+              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+                <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
+                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
+                <span className="ml-auto text-xs font-mono-jetbrains" style={{ background: '#1a1a2e', borderRadius: '0.25rem', padding: '0 6px' }}>
                   <span style={{ color: '#00ff88' }}>{displayReveals.filter(r => r.direction === 'BID').length} BID</span>
                   <span style={{ color: '#666680' }}> / </span>
                   <span style={{ color: '#ff4466' }}>{displayReveals.filter(r => r.direction === 'ASK').length} ASK</span>
@@ -896,7 +914,7 @@ export default function VeilForgeDashboard() {
                       {displayReveals.map(reveal => (
                         <tr
                           key={reveal.id}
-                          className={`${reveal.isNew ? 'row-enter' : ''} ${reveal.matching ? 'row-matching' : ''} ${reveal.glow ? 'row-glow' : ''}`}
+                          className={`${reveal.isNew ? 'row-enter' : ''} ${reveal.matching ? 'row-matching' : ''} ${reveal.glow ? 'row-glow' : ''} hover:bg-[#0d0d14] transition-colors`}
                           style={{
                             background: '#111118',
                             borderBottom: '1px solid #1a1a2e',
@@ -962,25 +980,41 @@ export default function VeilForgeDashboard() {
                   {bestRate.wethOutput.toFixed(6)}
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#666680' }}>WETH</span>
                 </div>
+                {/* Rate comparison row */}
+                <div className="flex justify-between text-xs mt-2">
+                  <span style={{ color: '#666680' }}>Best agent</span>
+                  <span className="font-mono-jetbrains" style={{ color: '#00d4ff' }}>
+                    via Agent-{bestRate.agentShort} | spread: {bestRate.spread.toFixed(2)}%
+                  </span>
+                </div>
               </div>
-              
-              <div className="mt-2 font-mono-jetbrains text-xs" style={{ color: '#666680' }}>
-                via Agent-{bestRate.agentShort} | spread: {bestRate.spread.toFixed(2)}%
-              </div>
-              
+
+              {/* Pulse button */}
               <button
-                className="w-full mt-4 py-3 font-bold rounded-lg text-sm uppercase tracking-widest transition-colors cursor-pointer"
+                className="swap-pulse-btn w-full mt-5 py-3.5 font-bold rounded-lg text-base uppercase tracking-widest transition-colors cursor-pointer"
                 style={{ background: '#00d4ff', color: '#0a0a0f' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = '#00b8d9'}
                 onMouseLeave={(e) => e.currentTarget.style.background = '#00d4ff'}
               >
                 SWAP NOW
               </button>
-              
+
+              {/* MEV protection stats */}
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
+                  <div className="text-xs" style={{ color: '#666680' }}>Commit Phase</div>
+                  <div className="font-mono-jetbrains text-xs text-white">Hash only</div>
+                </div>
+                <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
+                  <div className="text-xs" style={{ color: '#666680' }}>MEV Exposure</div>
+                  <div className="font-mono-jetbrains text-xs" style={{ color: '#00ff88' }}>0%</div>
+                </div>
+              </div>
+
               <div className="mt-3 text-xs text-center" style={{ color: '#666680' }}>
                 No frontrunning possible — orders are cryptographically hidden until execution
               </div>
-              
+
               <div className="mt-2 flex justify-center">
                 <span
                   className="inline-flex items-center gap-1 text-xs rounded-full px-3 py-1"
@@ -995,7 +1029,7 @@ export default function VeilForgeDashboard() {
           
           {/* ── RIGHT PANEL — AGENT COMPETITION ── */}
           <div className="w-[30%] flex flex-col">
-            <div className="text-xs uppercase tracking-widest mb-3" style={{ color: '#666680' }}>AGENT COMPETITION</div>
+            <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
             <div className="flex flex-col gap-4 flex-1">
               {agentCards.map(agent => {
                 // In demo mode, merge mock simulation data for orders/lastAction/activity
@@ -1076,31 +1110,42 @@ export default function VeilForgeDashboard() {
         
         {/* BOTTOM TICKER */}
         <div
-          className="h-11 flex items-center"
+          className="h-14 flex items-center shrink-0"
           style={{ background: '#080810', borderTop: '1px solid #1a1a2e' }}
         >
+          {/* LIVE label */}
           <div
-            className="px-4 h-full flex items-center text-xs uppercase font-bold"
-            style={{ color: '#00d4ff', borderRight: '1px solid #1a1a2e' }}
+            className="flex items-center gap-2 px-4 h-full shrink-0"
+            style={{ borderRight: '1px solid #1a1a2e' }}
           >
-            LIVE FEED
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ff4466' }} />
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>LIVE</span>
           </div>
+          {/* Scrolling feed */}
           <div className="flex-1 overflow-hidden">
-            <div className="animate-ticker flex gap-8 whitespace-nowrap">
+            <div className="animate-ticker flex gap-10 whitespace-nowrap items-center">
               {[...displayTicker, ...displayTicker].map((event, i) => (
                 event.type === 'match' ? (
                   <span
                     key={`${event.id}-${i}`}
-                    className="text-xs px-3 py-0.5 rounded-full font-medium"
-                    style={{ background: '#00d4ff', color: '#0a0a0f' }}
+                    className="text-sm font-mono font-bold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}
+                  >
+                    {event.text}
+                  </span>
+                ) : event.type === 'reveal' ? (
+                  <span
+                    key={`${event.id}-${i}`}
+                    className="text-sm font-mono"
+                    style={{ color: 'white' }}
                   >
                     {event.text}
                   </span>
                 ) : (
                   <span
                     key={`${event.id}-${i}`}
-                    className="text-xs"
-                    style={{ color: event.type === 'commit' ? '#666680' : 'white' }}
+                    className="text-sm font-mono"
+                    style={{ color: '#666680' }}
                   >
                     {event.text}
                   </span>
