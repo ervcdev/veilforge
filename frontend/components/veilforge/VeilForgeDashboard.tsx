@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Shield } from 'lucide-react'
 import Link from 'next/link'
+import { createPublicClient, http } from 'viem'
 import { useVeilForge } from '@/hooks/useVeilForge'
 
 // Types
@@ -52,17 +53,72 @@ interface BestRate {
   wethOutput: number
 }
 
-// Agents
-const AGENTS = [
-  { address: '0x1234567890abcdef5678', short: '0x1234...5678', strategy: 'MARKET MAKER' as const },
-  { address: '0x8765432109abcdef4321', short: '0x8765...4321', strategy: 'ARBITRAGE' as const },
-  { address: '0xABCDEF0123456789EF01', short: '0xABCD...EF01', strategy: 'CONSERVATIVE' as const },
-]
+interface OnchainAgentStats {
+  address: string
+  registeredAt: bigint
+  slashCount: bigint
+  ordersExecuted: bigint
+  registered: boolean
+  collateral: bigint
+  totalVolume: bigint
+  feesEarned: bigint
+}
+
+// Contracts
+const AGENT_REGISTRY_ADDRESS = '0x22b4710F8219949D98849dAdBecF077a1b0Edc75' as const
+
+const REGISTRY_ABI = [
+  {
+    name: 'getAllAgents',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'getAgent',
+    type: 'function',
+    inputs: [{ name: 'agent', type: 'address' }],
+    outputs: [{
+      type: 'tuple',
+      components: [
+        { name: 'registeredAt',   type: 'uint64'  },
+        { name: 'slashCount',     type: 'uint64'  },
+        { name: 'ordersExecuted', type: 'uint64'  },
+        { name: 'registered',     type: 'bool'    },
+        { name: 'collateral',     type: 'uint256' },
+        { name: 'totalVolume',    type: 'uint256' },
+        { name: 'feesEarned',     type: 'uint256' },
+      ],
+    }],
+    stateMutability: 'view',
+  },
+] as const
+
+const SOMNIA_CHAIN = {
+  id: 50312,
+  name: 'Somnia Testnet',
+  nativeCurrency: { name: 'STT', symbol: 'STT', decimals: 18 },
+  rpcUrls: { default: { http: ['https://dream-rpc.somnia.network'] } },
+} as const
+
+const publicClient = createPublicClient({
+  chain: SOMNIA_CHAIN,
+  transport: http(),
+})
+
+const STRATEGY_LABELS = ['MARKET MAKER', 'ARBITRAGE', 'CONSERVATIVE'] as const
+const SPREAD_RANGES = ['0.20-0.35%', '0.08-0.40%', '0.60-0.80%'] as const
 
 // Helpers
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const randomHex = (len: number) => Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
+
+function shortenAddress(addr: string): string {
+  if (!addr || addr.length < 10) return addr
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
 
 export default function VeilForgeDashboard() {
   const {
@@ -90,8 +146,8 @@ export default function VeilForgeDashboard() {
   const revealCycleRef = useRef(0)
   const [glowingAgent, setGlowingAgent] = useState<string | null>(null)
   const [bestRate, setBestRate] = useState<BestRate>({
-    agentAddress: AGENTS[0].address,
-    agentShort: AGENTS[0].short,
+    agentAddress: '',
+    agentShort: '',
     spread: 0.25,
     wethOutput: 0.3342,
   })
@@ -106,13 +162,141 @@ export default function VeilForgeDashboard() {
   const statusMode: 'live' | 'demo' = isConnected ? 'live' : 'demo'
   const [now, setNow] = useState(Date.now())
 
-  useEffect(() => {
-    if (isConnected) {
-      setConnectionTimedOut(false)
-      return
+  // ──────────────────────────────────────────────────────────────
+  // IMPROVEMENT 1 — Real onchain agent data
+  // ──────────────────────────────────────────────────────────────
+  const [onchainAgents, setOnchainAgents] = useState<OnchainAgentStats[]>([])
+  const prevOrdersRef = useRef<Record<string, bigint>>({})
+
+  const fetchAgentData = useCallback(async () => {
+    try {
+      const addresses = await publicClient.readContract({
+        address: AGENT_REGISTRY_ADDRESS,
+        abi: REGISTRY_ABI,
+        functionName: 'getAllAgents',
+      }) as string[]
+
+      if (!addresses || addresses.length === 0) return
+
+      const stats = await Promise.all(
+        addresses.map(async (addr) => {
+          const data = await publicClient.readContract({
+            address: AGENT_REGISTRY_ADDRESS,
+            abi: REGISTRY_ABI,
+            functionName: 'getAgent',
+            args: [addr as `0x${string}`],
+          }) as {
+            registeredAt: bigint
+            slashCount: bigint
+            ordersExecuted: bigint
+            registered: boolean
+            collateral: bigint
+            totalVolume: bigint
+            feesEarned: bigint
+          }
+          return { address: addr, ...data }
+        })
+      )
+
+      setOnchainAgents(stats)
+    } catch {
+      // silently fail — demo data continues showing
     }
-    if (!contractsConfigured) return
+  }, [])
+
+  useEffect(() => {
+    fetchAgentData()
+    const interval = setInterval(fetchAgentData, 10_000)
+    return () => clearInterval(interval)
+  }, [fetchAgentData])
+
+  // Detect which agents had ordersExecuted increase since last poll
+  const [recentlyActiveAgents, setRecentlyActiveAgents] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (onchainAgents.length === 0) return
+    const newlyActive = new Set<string>()
+    onchainAgents.forEach(agent => {
+      const prev = prevOrdersRef.current[agent.address]
+      if (prev !== undefined && agent.ordersExecuted > prev) {
+        newlyActive.add(agent.address)
+      }
+      prevOrdersRef.current[agent.address] = agent.ordersExecuted
+    })
+    if (newlyActive.size > 0) {
+      setRecentlyActiveAgents(newlyActive)
+      const timer = setTimeout(() => setRecentlyActiveAgents(new Set()), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [onchainAgents])
+
+  // Build the agent cards: use onchain data when available, fall back to demo
+  const agentCards = useMemo(() => {
+    if (onchainAgents.length > 0) {
+      const maxOrders = Math.max(1, ...onchainAgents.map(a => Number(a.ordersExecuted)))
+      return onchainAgents.slice(0, 3).map((agent, i) => {
+        const feesUsd = Number(agent.feesEarned) / 1e18
+        const orders = Number(agent.ordersExecuted)
+        const isTopAgent = orders === maxOrders && orders > 0
+        // Determine dot color
+        let dotColor = '#ff4466'  // red: not registered or slashed heavily
+        let dotPulse = false
+        if (agent.registered && agent.slashCount <= 2n) {
+          if (recentlyActiveAgents.has(agent.address)) {
+            dotColor = '#00ff88'
+            dotPulse = true
+          } else if (orders > 0) {
+            dotColor = '#00ff88'
+          } else {
+            dotColor = '#ffaa00'
+          }
+        }
+
+        // Last action: find most recent event matching this agent
+        const lastCommit = liveCommits.find(c => c.agent.toLowerCase() === agent.address.toLowerCase())
+        const lastReveal = liveReveals.find(r => r.agent.toLowerCase() === agent.address.toLowerCase())
+        let lastAction = 'No activity yet'
+        if (lastReveal) {
+          lastAction = `${lastReveal.direction} ${parseFloat(lastReveal.amount).toFixed(2)} WETH @ ${parseFloat(lastReveal.price).toFixed(0)}`
+        } else if (lastCommit) {
+          lastAction = `Commit ${lastCommit.hash.slice(0, 10)}...`
+        }
+
+        return {
+          address: agent.address,
+          short: shortenAddress(agent.address),
+          strategy: STRATEGY_LABELS[i] ?? 'UNKNOWN',
+          spreadRange: SPREAD_RANGES[i] ?? '—',
+          orders,
+          feesUsd,
+          activityPct: maxOrders > 0 ? (orders / maxOrders) * 100 : 0,
+          isTopAgent,
+          dotColor,
+          dotPulse,
+          lastAction,
+          registered: agent.registered,
+        }
+      })
+    }
+
+    // Demo fallback
+    return [
+      { address: '0x1234567890abcdef5678', short: '0x1234...5678', strategy: 'MARKET MAKER' as const, spreadRange: '0.20-0.35%', orders: 47, feesUsd: 1247.50, activityPct: 75, isTopAgent: true, dotColor: '#00ff88', dotPulse: false, lastAction: 'BID 1.20 WETH @ 3002', registered: true },
+      { address: '0x8765432109abcdef4321', short: '0x8765...4321', strategy: 'ARBITRAGE' as const, spreadRange: '0.08-0.40%', orders: 31, feesUsd: 892.30, activityPct: 45, isTopAgent: false, dotColor: '#00ff88', dotPulse: false, lastAction: 'ASK 0.85 WETH @ 2998', registered: true },
+      { address: '0xABCDEF0123456789EF01', short: '0xABCD...EF01', strategy: 'CONSERVATIVE' as const, spreadRange: '0.60-0.80%', orders: 18, feesUsd: 234.80, activityPct: 25, isTopAgent: false, dotColor: '#ffaa00', dotPulse: false, lastAction: 'BID 0.40 WETH @ 2995', registered: true },
+    ]
+  }, [onchainAgents, recentlyActiveAgents, liveCommits, liveReveals])
+
+  // Mock agent state for demo simulation
+  const [mockAgentOrders, setMockAgentOrders] = useState<Record<string, { orders: number; lastAction: string; activityPct: number }>>({})
+  // Demo glow (separate from onchain)
+
+  useEffect(() => {
+    if (isConnected) return
     const timer = setTimeout(() => setConnectionTimedOut(true), 10_000)
+    if (isConnected) {
+      clearTimeout(timer)
+      setConnectionTimedOut(false)
+    }
     return () => clearTimeout(timer)
   }, [isConnected, contractsConfigured])
 
@@ -163,11 +347,6 @@ export default function VeilForgeDashboard() {
       activeOrders: liveMetrics.activeOrders,
     }
   }, [isConnected, metrics, liveMetrics])
-  const [agentStats, setAgentStats] = useState([
-    { ...AGENTS[0], spread: 0.12, orders: 47, pnl: 1247.50, activity: 75, lastAction: 'BID 1.20 WETH @ 3002' },
-    { ...AGENTS[1], spread: 0.08, orders: 31, pnl: 892.30, activity: 45, lastAction: 'ASK 0.85 WETH @ 2998' },
-    { ...AGENTS[2], spread: 0.18, orders: 18, pnl: 234.80, activity: 25, lastAction: 'BID 0.40 WETH @ 2995' },
-  ])
 
   // Live block flash when connected to chain
   useEffect(() => {
@@ -216,8 +395,10 @@ export default function VeilForgeDashboard() {
 
   // Best rate update
   useEffect(() => {
+    const cards = agentCards
+    if (cards.length === 0) return
     const interval = setInterval(() => {
-      const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)]
+      const agent = cards[Math.floor(Math.random() * cards.length)]
       const amount = parseFloat(inputAmount) || 1000
       setBestRate({
         agentAddress: agent.address,
@@ -227,7 +408,7 @@ export default function VeilForgeDashboard() {
       })
     }, 2000)
     return () => clearInterval(interval)
-  }, [inputAmount])
+  }, [inputAmount, agentCards])
 
   // Flash metric helper
   const flashMetric = useCallback((metricName: string) => {
@@ -239,16 +420,23 @@ export default function VeilForgeDashboard() {
   useEffect(() => {
     if (isConnected) return
 
+    const demoAddresses = [
+      '0x1234567890abcdef5678',
+      '0x8765432109abcdef4321',
+      '0xABCDEF0123456789EF01',
+    ]
+    const demoShorts = ['0x1234...5678', '0x8765...4321', '0xABCD...EF01']
+
     const interval = setInterval(() => {
-      // Pick random agent
-      const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)]
+      const agentIdx = Math.floor(Math.random() * 3)
+      const agentAddr = demoAddresses[agentIdx]
+      const agentShort = demoShorts[agentIdx]
       const hash = `${randomHex(8)}...${randomHex(4)}`
       
-      // Create commit
       const newCommit: CommitRow = {
         id: generateId(),
-        agent: agent.address,
-        agentShort: agent.short,
+        agent: agentAddr,
+        agentShort,
         hash: `0x${randomHex(64)}`,
         hashShort: hash,
         block: blockNumberRef.current,
@@ -261,38 +449,45 @@ export default function VeilForgeDashboard() {
         return updated.slice(0, 5)
       })
       
-      // Add ticker event
       setMockTicker(prev => {
         const event: TickerEvent = {
           id: generateId(),
           type: 'commit',
-          text: `Agent ${agent.short} committed · ${hash}`,
+          text: `Agent ${agentShort} committed — ${hash}`,
           timestamp: Date.now(),
         }
         return [event, ...prev].slice(0, 20)
       })
       
-      // Trigger glow
-      setGlowingAgent(agent.address)
+      setGlowingAgent(agentAddr)
       setTimeout(() => setGlowingAgent(null), 600)
       
-      // Update agent stats + last action for the glowing agent
       const actionDir = Math.random() < 0.5 ? 'BID' : 'ASK'
       const actionAmount = randomInRange(0.4, 1.8).toFixed(2)
       const actionPrice = randomInRange(2992, 3008).toFixed(0)
       const newLastAction = `${actionDir} ${actionAmount} WETH @ ${actionPrice}`
-      setAgentStats(prev => prev.map(a => 
-        a.address === agent.address 
-          ? { ...a, orders: a.orders + 1, activity: Math.min(100, a.activity + 5), lastAction: newLastAction }
-          : { ...a, activity: Math.max(10, a.activity - 2) }
-      ))
+      setMockAgentOrders(prev => {
+        const entry = prev[agentAddr] ?? { orders: 0, lastAction: '', activityPct: 20 }
+        const updated = {
+          ...prev,
+          [agentAddr]: {
+            orders: entry.orders + 1,
+            lastAction: newLastAction,
+            activityPct: Math.min(100, entry.activityPct + 5),
+          },
+        }
+        // Decay others
+        demoAddresses.forEach(a => {
+          if (a !== agentAddr && updated[a]) {
+            updated[a] = { ...updated[a], activityPct: Math.max(10, updated[a].activityPct - 2) }
+          }
+        })
+        return updated
+      })
       
-      // Schedule reveal after 2500ms
       setTimeout(() => {
-        // Strict 50/50 alternation: odd cycles = BID, even cycles = ASK
         const direction: 'BID' | 'ASK' = revealCycleRef.current % 2 === 1 ? 'BID' : 'ASK'
         revealCycleRef.current += 1
-        // BIDs cluster slightly higher, ASKs slightly lower so they cross often
         const price = direction === 'BID'
           ? randomInRange(2998, 3008)
           : randomInRange(2992, 3002)
@@ -300,8 +495,8 @@ export default function VeilForgeDashboard() {
 
         const newReveal: RevealRow = {
           id: generateId(),
-          agent: agent.address,
-          agentShort: agent.short,
+          agent: agentAddr,
+          agentShort,
           direction,
           price,
           amount,
@@ -310,27 +505,23 @@ export default function VeilForgeDashboard() {
           glow: true,
         }
 
-        // This commit has now transitioned into a reveal — remove it from COMMITS
         setMockCommits(prev => prev.filter(c => c.id !== newCommit.id))
 
-        // Clear the cyan glow highlight after 400ms
         const revealId = newReveal.id
         setTimeout(() => {
           setMockReveals(prev => prev.map(r => r.id === revealId ? { ...r, glow: false } : r))
         }, 400)
 
-        // Add reveal ticker event
         setMockTicker(prev => {
           const event: TickerEvent = {
             id: generateId(),
             type: 'reveal',
-            text: `${agent.short} revealed ${direction} ${amount.toFixed(2)} WETH @ ${price.toFixed(0)} USDC`,
+            text: `Agent ${agentShort} revealed ${direction} ${amount.toFixed(2)} WETH @ ${price.toFixed(0)} USDC`,
             timestamp: Date.now(),
           }
           return [event, ...prev].slice(0, 20)
         })
 
-        // Active orders go UP on each reveal
         setMetrics(prev => {
           flashMetric('activeOrders')
           flashMetric('tps')
@@ -341,11 +532,9 @@ export default function VeilForgeDashboard() {
           }
         })
 
-        // Insert reveal, then look for a crossing counterparty already on the book
         setMockReveals(prev => {
           const withNew = [newReveal, ...prev.map(r => ({ ...r, isNew: false }))]
 
-          // Find an opposing order that crosses: BID price >= ASK price
           const counterparty = withNew.find(r => {
             if (r.id === newReveal.id) return false
             if (matchedIdsRef.current.has(r.id)) return false
@@ -361,22 +550,19 @@ export default function VeilForgeDashboard() {
             const fillAmount = Math.min(bid.amount, ask.amount)
             const fillPrice = (bid.price + ask.price) / 2
 
-            // Mark both as matched so we don't double-match
             matchedIdsRef.current.add(newReveal.id)
             matchedIdsRef.current.add(counterparty.id)
 
-            // Emit MATCH ticker event
             setMockTicker(t => {
               const event: TickerEvent = {
                 id: generateId(),
                 type: 'match',
-                text: `MATCH ${bid.agentShort} ↔ ${ask.agentShort} — ${fillAmount.toFixed(2)} WETH @ ${fillPrice.toFixed(0)} USDC`,
+                text: `⚡ MATCH ${bid.agentShort} ↔ ${ask.agentShort} — ${fillAmount.toFixed(2)} WETH @ ${fillPrice.toFixed(0)} USDC`,
                 timestamp: Date.now(),
               }
               return [event, ...t].slice(0, 20)
             })
 
-            // Matches +1, volume up, active orders down by 2 (both filled)
             setMetrics(m => {
               flashMetric('matches')
               flashMetric('volume')
@@ -391,7 +577,6 @@ export default function VeilForgeDashboard() {
               }
             })
 
-            // Flash both matched rows in cyan, then remove them shortly after
             const flagged = withNew.map(r =>
               r.id === newReveal.id || r.id === counterparty.id
                 ? { ...r, matching: true }
@@ -414,6 +599,69 @@ export default function VeilForgeDashboard() {
     
     return () => clearInterval(interval)
   }, [flashMetric, isConnected])
+
+  // ──────────────────────────────────────────────────────────────
+  // IMPROVEMENT 2 — Metric display helpers
+  // ──────────────────────────────────────────────────────────────
+  const metricItems = [
+    {
+      key: 'tps',
+      label: 'TPS',
+      valueNode: (
+        <span className="flex items-center gap-1">
+          <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+            {displayMetrics.tps.toLocaleString()}
+          </span>
+          <span className="text-xl font-bold" style={{ color: tpsDirection === 'up' ? '#00ff88' : '#ff4466' }}>
+            {tpsDirection === 'up' ? '↑' : '↓'}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'matches',
+      label: 'MATCHES',
+      valueNode: (
+        <span
+          className={`font-mono-jetbrains text-5xl font-bold ${displayMetrics.matches > 0 ? 'animate-pulse' : ''}`}
+          style={{ color: displayMetrics.matches > 0 ? '#00ff88' : '#666680' }}
+        >
+          {displayMetrics.matches.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'volume',
+      label: 'VOLUME (USDC)',
+      valueNode: (
+        <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+          ${displayMetrics.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        </span>
+      ),
+    },
+    {
+      key: 'activeOrders',
+      label: 'ACTIVE ORDERS',
+      valueNode: (
+        <span
+          className="font-mono-jetbrains text-5xl font-bold"
+          style={{ color: displayMetrics.activeOrders > 0 ? 'white' : '#666680' }}
+        >
+          {displayMetrics.activeOrders.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'avgReveal',
+      label: 'AVG REVEAL',
+      valueNode: (
+        <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+          {displayMetrics.avgReveal.toFixed(2)}
+          <span className="text-lg font-normal ml-1" style={{ color: '#666680' }}>ms</span>
+        </span>
+      ),
+    },
+  ]
 
   return (
     <>
@@ -441,6 +689,11 @@ export default function VeilForgeDashboard() {
           100% { background: #111118; box-shadow: inset 0 0 0 rgba(0, 212, 255, 0); }
         }
         .row-glow { animation: reveal-glow 400ms ease-out forwards; }
+        @keyframes swap-pulse-bg {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.5); }
+          50% { box-shadow: 0 0 0 6px rgba(0, 212, 255, 0); }
+        }
+        .swap-pulse-btn { animation: swap-pulse-bg 2.5s ease-in-out infinite; }
       `}</style>
 
       {showBanner && (
@@ -468,29 +721,31 @@ export default function VeilForgeDashboard() {
 
       <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
         {/* TOP BAR */}
-        <div className="h-12 flex items-center justify-between px-4" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
-          <div className="font-mono-jetbrains font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
+        <div className="h-12 flex items-center justify-between px-6" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
+          {/* Logo */}
           <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-yellow-400 animate-pulse'}`}
-            />
-            <span className="text-sm" style={{ color: '#666680' }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <polygon points="8,1 15,4.5 15,11.5 8,15 1,11.5 1,4.5" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
+            </svg>
+            <div className="font-mono-jetbrains font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
+          </div>
+          {/* Network */}
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-yellow-400 animate-pulse'}`} />
+            <span className="text-sm font-mono-jetbrains" style={{ color: '#666680' }}>
               {isConnected ? 'SOMNIA TESTNET' : 'DEMO MODE'}
             </span>
           </div>
+          {/* Right cluster */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${statusMode === 'live' ? 'animate-pulse' : ''}`}
-                style={{
-                  background: statusMode === 'live' ? '#00ff88' : '#ffcc44',
-                }}
+                style={{ background: statusMode === 'live' ? '#00ff88' : '#ffcc44' }}
               />
               <span
                 className="font-mono-jetbrains text-xs uppercase"
-                style={{
-                  color: statusMode === 'live' ? '#00ff88' : '#ffcc44',
-                }}
+                style={{ color: statusMode === 'live' ? '#00ff88' : '#ffcc44' }}
               >
                 {statusMode === 'live' ? 'LIVE' : 'DEMO'}
               </span>
@@ -511,17 +766,23 @@ export default function VeilForgeDashboard() {
               </span>
             </div>
             <span style={{ color: '#1a1a2e' }}>|</span>
-            <span className="text-xs" style={{ color: '#00d4ff' }}>3 AGENTS ACTIVE</span>
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#00d4ff' }}>
+              {onchainAgents.length > 0 ? `${onchainAgents.length} AGENTS ACTIVE` : '3 AGENTS ACTIVE'}
+            </span>
+            <span style={{ color: '#1a1a2e' }}>|</span>
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>◈ MEV PROTECTED</span>
             <Link
               href="/audit"
-              className="font-mono-jetbrains text-xs px-2 py-1 rounded border transition-colors"
+              className="font-mono-jetbrains text-xs px-2 py-1 rounded border transition-all"
               style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
+                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
+                ;(e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
                 ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#00d4ff'
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.color = '#666680'
+                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
+                ;(e.currentTarget as HTMLAnchorElement).style.color = '#666680'
                 ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#1a1a2e'
               }}
             >
@@ -530,163 +791,165 @@ export default function VeilForgeDashboard() {
           </div>
         </div>
         
-        {/* METRICS BAR */}
-        <div className="flex gap-3 p-3" style={{ background: '#0a0a0f', minHeight: '72px' }}>
-          {[
-            { key: 'tps', label: 'TPS', value: displayMetrics.tps.toLocaleString() },
-            { key: 'matches', label: 'MATCHES', value: displayMetrics.matches.toLocaleString() },
-            { key: 'volume', label: 'VOLUME (USDC)', prefix: '$', value: displayMetrics.volume.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-            { key: 'activeOrders', label: 'ACTIVE ORDERS', value: displayMetrics.activeOrders.toLocaleString() },
-            { key: 'avgReveal', label: 'AVG REVEAL', value: displayMetrics.avgReveal.toFixed(2), suffix: 'ms' },
-          ].map(metric => (
-            <div 
-              key={metric.key} 
-              className="flex-1 rounded p-3 border-t flex flex-col justify-between"
+        {/* ── IMPROVEMENT 2 — METRICS BAR ── */}
+        <div className="flex gap-4 p-4" style={{ background: '#0a0a0f' }}>
+          {metricItems.map(metric => (
+            <div
+              key={metric.key}
+              className="flex-1 rounded p-4 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid #1a1a2e', borderTopColor: 'rgba(0, 212, 255, 0.2)' }}
             >
-              <div className="text-xs uppercase leading-tight" style={{ color: '#666680' }}>{metric.label}</div>
-              <div 
-                className={`font-mono-jetbrains text-base font-bold transition-colors duration-200 flex items-center gap-1 flex-wrap ${flashingMetric === metric.key ? 'flash-white' : ''}`}
-                style={{ color: flashingMetric === metric.key ? 'white' : '#00d4ff', lineHeight: '1.2' }}
-              >
-                {metric.prefix && (
-                  <span className="text-xs font-normal whitespace-nowrap" style={{ color: '#666680' }}>{metric.prefix}</span>
-                )}
-                <span className="whitespace-nowrap">{metric.value}</span>
-                {metric.suffix && (
-                  <span className="text-xs font-normal whitespace-nowrap" style={{ color: '#666680' }}>{metric.suffix}</span>
-                )}
-                {metric.key === 'tps' && (
-                  <span
-                    className="text-xs font-normal whitespace-nowrap"
-                    style={{ color: tpsDirection === 'up' ? '#00ff88' : '#ff4466' }}
-                  >
-                    {tpsDirection === 'up' ? '↑' : '↓'}
-                  </span>
-                )}
+              <div className="text-xs uppercase leading-tight tracking-widest" style={{ color: '#666680' }}>
+                {metric.label}
+              </div>
+              <div className="w-8 h-px my-1" style={{ background: '#1a1a2e' }} />
+              <div className={`transition-colors duration-200 leading-none ${flashingMetric === metric.key ? 'flash-white' : ''}`}>
+                {metric.valueNode}
               </div>
             </div>
           ))}
         </div>
         
         {/* THREE PANELS */}
-        <div className="flex-1 flex gap-3 px-3 pb-0 overflow-hidden">
-          {/* LEFT PANEL - ORDERBOOK */}
-          <div className="w-[40%] flex flex-col gap-3">
+        <div className="flex-1 flex gap-6 px-6 pb-0 overflow-hidden">
+          {/* ── LEFT PANEL — COMMITS & REVEALS ── */}
+          <div className="w-[40%] flex flex-col gap-6">
+
             {/* COMMITS */}
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: '#1a1a2e' }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: '#666680' }}>COMMITS</span>
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#1a1a2e', color: '#00d4ff' }}>{displayCommits.length}</span>
+              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+                <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
+                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
               </div>
               <div className="flex-1 overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: '#111118' }}>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>AGENT</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>HASH</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>BLOCK</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayCommits.map(commit => {
-                      const age = (now - commit.timestamp) / 1000
-                      const faded = age > 3
-                      return (
-                      <tr 
-                        key={commit.id} 
-                        className={commit.isNew ? 'row-enter' : ''}
-                        style={{ 
-                          background: '#111118', 
-                          borderBottom: '1px solid #1a1a2e',
-                          opacity: faded ? 0.6 : 1,
-                          transition: 'opacity 600ms ease',
-                        }}
-                      >
-                        <td className="p-2 font-mono-jetbrains" style={{ color: '#666680' }}>{commit.agentShort}</td>
-                        <td 
-                          className="p-2 font-mono-jetbrains transition-all duration-300"
-                          style={{ 
-                            color: '#00d4ff',
-                            textShadow: commit.isNew ? '0 0 8px rgba(0, 212, 255, 0.9)' : 'none',
-                            filter: commit.isNew ? 'brightness(1.4)' : 'brightness(1)',
-                          }}
-                        >
-                          {commit.hashShort}
-                        </td>
-                        <td className="p-2 font-mono-jetbrains text-white">{commit.block}</td>
-                        <td className="p-2">
-                          <span className="px-1 rounded text-xs" style={{ background: '#1a1a2e', color: '#666680' }}>PENDING</span>
-                        </td>
+                {displayCommits.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
+                    <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>⬡</span>
+                    <span className="text-xs">Waiting for agent commits</span>
+                    <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Agents cycle every ~8 seconds</span>
+                  </div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: '#111118' }}>
+                        <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
+                        <th className="text-left p-2 font-normal" style={{ color: '#666680', width: '100%' }}>HASH</th>
+                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>BLOCK</th>
+                        <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {displayCommits.map(commit => {
+                        const age = (now - commit.timestamp) / 1000
+                        const faded = age > 3
+                        return (
+                          <tr
+                            key={commit.id}
+                            className={`${commit.isNew ? 'row-enter' : ''} hover:bg-[#0d0d14] transition-colors`}
+                            style={{
+                              background: '#111118',
+                              borderBottom: '1px solid #1a1a2e',
+                              opacity: faded ? 0.6 : 1,
+                              transition: 'opacity 600ms ease, background-color 150ms ease',
+                            }}
+                          >
+                            <td className="p-2 font-mono-jetbrains text-xs w-28" style={{ color: '#666680' }}>{commit.agentShort}</td>
+                            <td
+                              className="p-2 font-mono-jetbrains text-xs transition-all duration-300 max-w-0"
+                              style={{
+                                color: '#00d4ff',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                textShadow: commit.isNew ? '0 0 8px rgba(0, 212, 255, 0.9)' : 'none',
+                                filter: commit.isNew ? 'brightness(1.4)' : 'brightness(1)',
+                                width: '100%',
+                              }}
+                            >
+                              {commit.hashShort}
+                            </td>
+                            <td className="p-2 font-mono-jetbrains text-xs w-24" style={{ color: '#666680' }}>{commit.block}</td>
+                            <td className="p-2 w-20">
+                              <span className="px-1 rounded text-xs" style={{ background: '#1a1a2e', color: '#666680' }}>PENDING</span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
             
             {/* REVEALS */}
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: '#1a1a2e' }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: '#666680' }}>REVEALS</span>
-                <span className="text-xs px-2 py-0.5 rounded font-mono-jetbrains" style={{ background: '#1a1a2e' }}>
+              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+                <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
+                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
+                <span className="ml-auto text-xs font-mono-jetbrains" style={{ background: '#1a1a2e', borderRadius: '0.25rem', padding: '0 6px' }}>
                   <span style={{ color: '#00ff88' }}>{displayReveals.filter(r => r.direction === 'BID').length} BID</span>
                   <span style={{ color: '#666680' }}> / </span>
                   <span style={{ color: '#ff4466' }}>{displayReveals.filter(r => r.direction === 'ASK').length} ASK</span>
                 </span>
               </div>
               <div className="flex-1 overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: '#111118' }}>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>AGENT</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>DIR</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>PRICE</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>AMOUNT</th>
-                      <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayReveals.map(reveal => (
-                      <tr 
-                        key={reveal.id}
-                        className={`${reveal.isNew ? 'row-enter' : ''} ${reveal.matching ? 'row-matching' : ''} ${reveal.glow ? 'row-glow' : ''}`}
-                        style={{ 
-                          background: '#111118', 
-                          borderBottom: '1px solid #1a1a2e',
-                          borderLeft: `2px solid ${reveal.matching ? '#00d4ff' : reveal.direction === 'BID' ? '#00ff88' : '#ff4466'}`,
-                        }}
-                      >
-                        <td className="p-2 font-mono-jetbrains" style={{ color: '#666680' }}>{reveal.agentShort}</td>
-                        <td className="p-2">
-                          <span 
-                            className="px-1 rounded text-xs"
-                            style={{ 
-                              background: reveal.direction === 'BID' ? '#003322' : '#330011',
-                              color: reveal.direction === 'BID' ? '#00ff88' : '#ff4466',
-                            }}
-                          >
-                            {reveal.direction}
-                          </span>
-                        </td>
-                        <td className="p-2 font-mono-jetbrains text-white">{reveal.price.toFixed(2)} USDC</td>
-                        <td className="p-2 font-mono-jetbrains" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
-                        <td className="p-2">
-                          <span className="px-1 rounded text-xs" style={{ background: '#001a22', color: '#00d4ff' }}>REVEALED</span>
-                        </td>
+                {displayReveals.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
+                    <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>◎</span>
+                    <span className="text-xs">No reveals yet</span>
+                    <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Reveals appear ~5 blocks after commit</span>
+                  </div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: '#111118' }}>
+                        <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
+                        <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>DIR</th>
+                        <th className="text-left p-2 font-normal w-32" style={{ color: '#666680' }}>PRICE</th>
+                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AMOUNT</th>
+                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {displayReveals.map(reveal => (
+                        <tr
+                          key={reveal.id}
+                          className={`${reveal.isNew ? 'row-enter' : ''} ${reveal.matching ? 'row-matching' : ''} ${reveal.glow ? 'row-glow' : ''} hover:bg-[#0d0d14] transition-colors`}
+                          style={{
+                            background: '#111118',
+                            borderBottom: '1px solid #1a1a2e',
+                            borderLeft: `2px solid ${reveal.matching ? '#00d4ff' : reveal.direction === 'BID' ? '#00ff88' : '#ff4466'}`,
+                          }}
+                        >
+                          <td className="p-2 font-mono-jetbrains text-xs w-28" style={{ color: '#666680' }}>{reveal.agentShort}</td>
+                          <td className="p-2 w-16">
+                            <span
+                              className="px-1 rounded text-xs"
+                              style={{
+                                background: reveal.direction === 'BID' ? 'rgba(0,255,136,0.12)' : 'rgba(255,68,102,0.12)',
+                                color: reveal.direction === 'BID' ? '#00ff88' : '#ff4466',
+                              }}
+                            >
+                              {reveal.direction}
+                            </span>
+                          </td>
+                          <td className="p-2 font-mono-jetbrains text-xs w-32 text-white">{reveal.price.toFixed(2)} USDC</td>
+                          <td className="p-2 font-mono-jetbrains text-xs w-24" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
+                          <td className="p-2 w-24">
+                            <span className="px-1 rounded text-xs" style={{ background: '#001a22', color: '#00d4ff' }}>REVEALED</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
           
           {/* CENTER PANEL - SWAP */}
           <div className="w-[30%]">
-            <div 
+            <div
               className="h-full rounded-lg p-6 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid rgba(0, 212, 255, 0.3)' }}
             >
@@ -710,34 +973,50 @@ export default function VeilForgeDashboard() {
               
               <div className="mt-4">
                 <label className="text-xs" style={{ color: '#666680' }}>YOU RECEIVE</label>
-                <div 
+                <div
                   className="relative mt-1 p-3 rounded font-mono-jetbrains text-xl text-white"
                   style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
                 >
                   {bestRate.wethOutput.toFixed(6)}
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#666680' }}>WETH</span>
                 </div>
+                {/* Rate comparison row */}
+                <div className="flex justify-between text-xs mt-2">
+                  <span style={{ color: '#666680' }}>Best agent</span>
+                  <span className="font-mono-jetbrains" style={{ color: '#00d4ff' }}>
+                    via Agent-{bestRate.agentShort} | spread: {bestRate.spread.toFixed(2)}%
+                  </span>
+                </div>
               </div>
-              
-              <div className="mt-2 font-mono-jetbrains text-xs" style={{ color: '#666680' }}>
-                via Agent-{bestRate.agentShort} | spread: {bestRate.spread.toFixed(2)}%
-              </div>
-              
-              <button 
-                className="w-full mt-4 py-3 font-bold rounded-lg text-sm uppercase tracking-widest transition-colors cursor-pointer"
+
+              {/* Pulse button */}
+              <button
+                className="swap-pulse-btn w-full mt-5 py-3.5 font-bold rounded-lg text-base uppercase tracking-widest transition-colors cursor-pointer"
                 style={{ background: '#00d4ff', color: '#0a0a0f' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = '#00b8d9'}
                 onMouseLeave={(e) => e.currentTarget.style.background = '#00d4ff'}
               >
                 SWAP NOW
               </button>
-              
+
+              {/* MEV protection stats */}
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
+                  <div className="text-xs" style={{ color: '#666680' }}>Commit Phase</div>
+                  <div className="font-mono-jetbrains text-xs text-white">Hash only</div>
+                </div>
+                <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
+                  <div className="text-xs" style={{ color: '#666680' }}>MEV Exposure</div>
+                  <div className="font-mono-jetbrains text-xs" style={{ color: '#00ff88' }}>0%</div>
+                </div>
+              </div>
+
               <div className="mt-3 text-xs text-center" style={{ color: '#666680' }}>
                 No frontrunning possible — orders are cryptographically hidden until execution
               </div>
-              
+
               <div className="mt-2 flex justify-center">
-                <span 
+                <span
                   className="inline-flex items-center gap-1 text-xs rounded-full px-3 py-1"
                   style={{ background: '#001a22', color: '#00ff88' }}
                 >
@@ -748,104 +1027,125 @@ export default function VeilForgeDashboard() {
             </div>
           </div>
           
-          {/* RIGHT PANEL - AGENT HEATMAP */}
+          {/* ── RIGHT PANEL — AGENT COMPETITION ── */}
           <div className="w-[30%] flex flex-col">
-            <div className="text-xs uppercase tracking-widest mb-3" style={{ color: '#666680' }}>AGENT COMPETITION</div>
+            <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
             <div className="flex flex-col gap-4 flex-1">
-              {agentStats.map(agent => (
-                <div 
-                  key={agent.address}
-                  className="rounded-lg p-4 transition-shadow duration-300"
-                  style={{ 
-                    background: '#0d0d14', 
-                    border: '1px solid #1a1a2e',
-                    boxShadow: glowingAgent === agent.address 
-                      ? '0 0 0 1px #00d4ff, 0 0 12px rgba(0, 212, 255, 0.2)' 
-                      : 'none',
-                  }}
-                >
-                  <div className="flex items-center">
-                    <div 
-                      className="w-2 h-2 rounded-full"
-                      style={{ 
-                        background: agent.strategy === 'MARKET MAKER' ? '#00ff88' : '#ffaa00',
-                      }}
-                    />
-                    <span className="font-mono-jetbrains text-xs text-white ml-2">{agent.short}</span>
-                    <span 
-                      className="ml-auto text-xs px-2 py-0.5 rounded font-medium"
-                      style={{
-                        background: agent.strategy === 'MARKET MAKER' ? 'rgb(30, 58, 138)' : agent.strategy === 'ARBITRAGE' ? 'rgb(124, 45, 18)' : 'rgb(88, 28, 135)',
-                        color: agent.strategy === 'MARKET MAKER' ? 'rgb(147, 197, 253)' : agent.strategy === 'ARBITRAGE' ? 'rgb(253, 186, 116)' : 'rgb(216, 180, 254)',
-                      }}
-                    >
-                      {agent.strategy}
-                    </span>
-                  </div>
-                  
-                  <div className="flex gap-4 mt-2">
-                    <div>
-                      <span className="text-xs" style={{ color: '#666680' }}>SPREAD</span>
-                      <span className="font-mono-jetbrains text-xs text-white ml-1">{agent.spread.toFixed(2)}%</span>
-                    </div>
-                    <div>
-                      <span className="text-xs" style={{ color: '#666680' }}>ORDERS</span>
-                      <span className="font-mono-jetbrains text-xs text-white ml-1">{agent.orders}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs" style={{ color: '#666680' }}>P&L</span>
+              {agentCards.map(agent => {
+                // In demo mode, merge mock simulation data for orders/lastAction/activity
+                const demoData = mockAgentOrders[agent.address]
+                const displayOrders = onchainAgents.length > 0 ? agent.orders : (demoData?.orders ?? agent.orders)
+                const displayLastAction = onchainAgents.length > 0 ? agent.lastAction : (demoData?.lastAction || agent.lastAction)
+                const displayActivity = onchainAgents.length > 0 ? agent.activityPct : (demoData?.activityPct ?? agent.activityPct)
+
+                return (
+                  <div
+                    key={agent.address}
+                    className="rounded-lg p-4 transition-shadow duration-300"
+                    style={{
+                      background: '#0d0d14',
+                      border: '1px solid #1a1a2e',
+                      boxShadow: glowingAgent === agent.address
+                        ? '0 0 0 1px #00d4ff, 0 0 12px rgba(0, 212, 255, 0.2)'
+                        : 'none',
+                    }}
+                  >
+                    {/* Header row */}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full shrink-0 ${agent.dotPulse ? 'animate-pulse' : ''}`}
+                        style={{ background: agent.dotColor }}
+                      />
+                      <span className="font-mono-jetbrains text-xs text-white">{agent.short}</span>
                       <span
-                        className="font-mono-jetbrains text-xs ml-1"
-                        style={{ color: agent.strategy === 'MARKET MAKER' ? '#00ff88' : agent.pnl < 500 ? '#ffaa00' : '#00ff88' }}
+                        className="ml-auto text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap"
+                        style={{
+                          background: agent.strategy === 'MARKET MAKER' ? 'rgb(30,58,138)' : agent.strategy === 'ARBITRAGE' ? 'rgb(124,45,18)' : 'rgb(88,28,135)',
+                          color: agent.strategy === 'MARKET MAKER' ? 'rgb(147,197,253)' : agent.strategy === 'ARBITRAGE' ? 'rgb(253,186,116)' : 'rgb(216,180,254)',
+                        }}
                       >
-                        +${agent.pnl.toFixed(2)}
+                        {agent.strategy}
                       </span>
                     </div>
-                  </div>
-                  
-                  <div className="mt-2 h-2 rounded-full" style={{ background: '#1a1a2e' }}>
-                    <div 
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{ background: '#00d4ff', width: `${agent.activity}%` }}
-                    />
-                  </div>
 
-                  <div className="font-mono-jetbrains text-xs mt-2" style={{ color: '#666680' }}>
-                    LAST ACTION: {agent.lastAction}
+                    {/* Stats row */}
+                    <div className="flex gap-4 mt-2">
+                      <div>
+                        <span className="text-xs" style={{ color: '#666680' }}>ORDERS</span>
+                        <span className="font-mono-jetbrains text-xs text-white ml-1">{displayOrders.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs" style={{ color: '#666680' }}>P&amp;L</span>
+                        <span className="font-mono-jetbrains text-xs ml-1" style={{ color: '#00ff88' }}>
+                          +${(onchainAgents.length > 0 ? agent.feesUsd : agent.feesUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs" style={{ color: '#666680' }}>SPREAD</span>
+                        <span className="font-mono-jetbrains text-xs text-white ml-1">{agent.spreadRange}</span>
+                      </div>
+                    </div>
+
+                    {/* Activity bar */}
+                    <div className="mt-2 h-2 rounded-full" style={{ background: '#1a1a2e' }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          background: agent.isTopAgent ? '#00d4ff' : '#666680',
+                          width: `${Math.max(2, displayActivity)}%`,
+                        }}
+                      />
+                    </div>
+
+                    {/* Last action */}
+                    <div className="font-mono-jetbrains text-xs mt-2 truncate" style={{ color: '#666680' }}>
+                      LAST ACTION: {displayLastAction}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
         
         {/* BOTTOM TICKER */}
-        <div 
-          className="h-11 flex items-center"
+        <div
+          className="h-14 flex items-center shrink-0"
           style={{ background: '#080810', borderTop: '1px solid #1a1a2e' }}
         >
-          <div 
-            className="px-4 h-full flex items-center text-xs uppercase font-bold"
-            style={{ color: '#00d4ff', borderRight: '1px solid #1a1a2e' }}
+          {/* LIVE label */}
+          <div
+            className="flex items-center gap-2 px-4 h-full shrink-0"
+            style={{ borderRight: '1px solid #1a1a2e' }}
           >
-            LIVE FEED
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ff4466' }} />
+            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>LIVE</span>
           </div>
+          {/* Scrolling feed */}
           <div className="flex-1 overflow-hidden">
-            <div className="animate-ticker flex gap-8 whitespace-nowrap">
+            <div className="animate-ticker flex gap-10 whitespace-nowrap items-center">
               {[...displayTicker, ...displayTicker].map((event, i) => (
                 event.type === 'match' ? (
                   <span
                     key={`${event.id}-${i}`}
-                    className="text-xs px-3 py-0.5 rounded-full font-medium"
-                    style={{ background: '#00d4ff', color: '#0a0a0f' }}
+                    className="text-sm font-mono font-bold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}
+                  >
+                    {event.text}
+                  </span>
+                ) : event.type === 'reveal' ? (
+                  <span
+                    key={`${event.id}-${i}`}
+                    className="text-sm font-mono"
+                    style={{ color: 'white' }}
                   >
                     {event.text}
                   </span>
                 ) : (
                   <span
                     key={`${event.id}-${i}`}
-                    className="text-xs"
-                    style={{ color: event.type === 'commit' ? '#666680' : 'white' }}
+                    className="text-sm font-mono"
+                    style={{ color: '#666680' }}
                   >
                     {event.text}
                   </span>
