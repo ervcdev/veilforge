@@ -109,6 +109,7 @@ const publicClient = createPublicClient({
 
 const STRATEGY_LABELS = ['MARKET MAKER', 'ARBITRAGE', 'CONSERVATIVE'] as const
 const SPREAD_RANGES = ['0.20-0.35%', '0.08-0.40%', '0.60-0.80%'] as const
+const STRATEGY_KEYS = ['marketMaker', 'arbitrage', 'conservative'] as const
 
 // Helpers
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -161,6 +162,75 @@ export default function VeilForgeDashboard() {
   const contractsConfigured = !!process.env.NEXT_PUBLIC_CLOB_ADDRESS
   const statusMode: 'live' | 'demo' = isConnected ? 'live' : 'demo'
   const [now, setNow] = useState(Date.now())
+
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+
+  const [agentRunning, setAgentRunning] = useState<Record<number, boolean>>({
+    1: false, 2: false, 3: false
+  })
+  const [agentPids, setAgentPids] = useState<Record<number, number | null>>({
+    1: null, 2: null, 3: null
+  })
+  const [starting, setStarting] = useState<Record<number, boolean>>({
+    1: false, 2: false, 3: false
+  })
+  const [logsOpen, setLogsOpen] = useState<Record<number, boolean>>({
+    1: false, 2: false, 3: false
+  })
+  const [agentLogs, setAgentLogs] = useState<Record<number, string[]>>({
+    1: [], 2: [], 3: []
+  })
+  const [autoKillAt, setAutoKillAt] = useState<Record<number, string | null>>({
+    1: null, 2: null, 3: null
+  })
+
+  // Status every 5 seconds
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/agents/status`)
+        if (!res.ok) return
+        const data = await res.json()
+        setAgentRunning({
+          1: data.agents?.[1]?.running || false,
+          2: data.agents?.[2]?.running || false,
+          3: data.agents?.[3]?.running || false
+        })
+        setAgentPids({
+          1: data.agents?.[1]?.pid || null,
+          2: data.agents?.[2]?.pid || null,
+          3: data.agents?.[3]?.pid || null
+        })
+      } catch { /* backend not available */ }
+    }
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Logs every 2 seconds when panel is open
+  useEffect(() => {
+    const openPanels = Object.entries(logsOpen)
+      .filter(([, open]) => open)
+      .map(([idx]) => parseInt(idx))
+
+    if (openPanels.length === 0) return
+
+    const poll = async () => {
+      for (const idx of openPanels) {
+        try {
+          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
+          if (!res.ok) continue
+          const data = await res.json()
+          setAgentLogs(prev => ({ ...prev, [idx]: data.logs || [] }))
+        } catch { /* silent */ }
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 2000)
+    return () => clearInterval(interval)
+  }, [logsOpen])
 
   // ──────────────────────────────────────────────────────────────
   // IMPROVEMENT 1 — Real onchain agent data
@@ -240,7 +310,7 @@ export default function VeilForgeDashboard() {
         // Determine dot color
         let dotColor = '#ff4466'  // red: not registered or slashed heavily
         let dotPulse = false
-        if (agent.registered && agent.slashCount <= 2n) {
+        if (agent.registered && Number(agent.slashCount) <= 2) {
           if (recentlyActiveAgents.has(agent.address)) {
             dotColor = '#00ff88'
             dotPulse = true
@@ -663,6 +733,72 @@ export default function VeilForgeDashboard() {
     },
   ]
 
+  const handleStartAgent = async (agentIndex: number, strategy: string) => {
+    const accessCode = window.prompt(
+      `VeilForge Judge Access\n\nEnter access code to start Agent #${agentIndex} (${strategy}):`
+    )
+    if (!accessCode) return
+
+    setStarting(prev => ({ ...prev, [agentIndex]: true }))
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agents/start`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':         'application/json',
+          'X-Judge-Access-Token': accessCode
+        },
+        body: JSON.stringify({ agentIndex, strategy })
+      })
+      const data = await res.json()
+
+      if (res.status === 401) {
+        window.alert('Invalid access code. Please try again.')
+        return
+      }
+      if (!data.success) {
+        window.alert(`Error: ${data.error}`)
+        return
+      }
+
+      setAgentRunning(prev => ({ ...prev, [agentIndex]: true }))
+      setAgentPids(prev => ({ ...prev, [agentIndex]: data.pid }))
+      setAutoKillAt(prev => ({ ...prev, [agentIndex]: data.autoKillAt }))
+    } catch {
+      window.alert('Cannot reach agent orchestrator. Is the backend running?')
+    } finally {
+      setStarting(prev => ({ ...prev, [agentIndex]: false }))
+    }
+  }
+
+  const handleStopAgent = async (agentIndex: number) => {
+    const accessCode = window.prompt(
+      `Stop Agent #${agentIndex}\n\nEnter access code to confirm:`
+    )
+    if (!accessCode) return
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agents/stop`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':         'application/json',
+          'X-Judge-Access-Token': accessCode
+        },
+        body: JSON.stringify({ agentIndex })
+      })
+      const data = await res.json()
+
+      if (res.status === 401) { window.alert('Invalid access code.'); return }
+      if (data.success) {
+        setAgentRunning(prev => ({ ...prev, [agentIndex]: false }))
+        setAgentPids(prev => ({ ...prev, [agentIndex]: null }))
+        setAutoKillAt(prev => ({ ...prev, [agentIndex]: null }))
+      }
+    } catch {
+      window.alert('Cannot reach agent orchestrator.')
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -1031,7 +1167,9 @@ export default function VeilForgeDashboard() {
           <div className="w-[30%] flex flex-col">
             <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
             <div className="flex flex-col gap-4 flex-1">
-              {agentCards.map(agent => {
+              {agentCards.map((agent, i) => {
+                const agentIndex = i + 1
+                const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
                 // In demo mode, merge mock simulation data for orders/lastAction/activity
                 const demoData = mockAgentOrders[agent.address]
                 const displayOrders = onchainAgents.length > 0 ? agent.orders : (demoData?.orders ?? agent.orders)
@@ -1100,6 +1238,71 @@ export default function VeilForgeDashboard() {
                     {/* Last action */}
                     <div className="font-mono-jetbrains text-xs mt-2 truncate" style={{ color: '#666680' }}>
                       LAST ACTION: {displayLastAction}
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-[#1a1a2e]">
+                      <div className="flex items-center gap-2">
+                        {starting[agentIndex] ? (
+                          <span className="text-xs font-mono text-[#666680] animate-pulse">STARTING...</span>
+                        ) : agentRunning[agentIndex] ? (
+                          <button
+                            onClick={() => handleStopAgent(agentIndex)}
+                            className="px-3 py-1 bg-[#ff4466]/20 border border-[#ff4466]/50
+                                       text-[#ff4466] text-xs font-mono rounded hover:bg-[#ff4466]/30 transition-colors"
+                          >
+                            ■ STOP
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartAgent(agentIndex, strategy)}
+                            className="px-3 py-1 bg-[#00ff88]/20 border border-[#00ff88]/50
+                                       text-[#00ff88] text-xs font-mono rounded hover:bg-[#00ff88]/30 transition-colors"
+                          >
+                            ▶ START
+                          </button>
+                        )}
+
+                        <span className={`text-xs font-mono ${agentRunning[agentIndex] ? 'text-[#00ff88]' : 'text-[#666680]'}`}>
+                          {agentRunning[agentIndex]
+                            ? `● RUNNING${agentPids[agentIndex] ? ` (PID: ${agentPids[agentIndex]})` : ''}`
+                            : '○ STOPPED'}
+                        </span>
+
+                        <button
+                          onClick={() => setLogsOpen(prev => ({ ...prev, [agentIndex]: !prev[agentIndex] }))}
+                          className="ml-auto text-xs text-[#666680] hover:text-[#00d4ff] transition-colors font-mono"
+                        >
+                          LOGS {logsOpen[agentIndex] ? '▲' : '▼'}
+                        </button>
+                      </div>
+
+                      {agentRunning[agentIndex] && autoKillAt[agentIndex] && (
+                        <p className="text-xs text-[#666680] font-mono mt-1">
+                          ⏱ Auto-stop: {new Date(autoKillAt[agentIndex]!).toLocaleTimeString()}
+                        </p>
+                      )}
+
+                      {logsOpen[agentIndex] && (
+                        <div className="mt-2 bg-[#080810] border border-[#1a1a2e] rounded p-2 h-32 overflow-y-auto">
+                          {agentLogs[agentIndex].length === 0 ? (
+                            <p className="text-[#666680] text-xs font-mono">
+                              {agentRunning[agentIndex] ? 'Waiting for logs...' : 'Agent is stopped'}
+                            </p>
+                          ) : (
+                            agentLogs[agentIndex].map((log, j) => (
+                              <p key={j} className={`text-xs font-mono leading-5 ${
+                                log.includes('✓') || log.includes('exitoso') || log.includes('started')
+                                  ? 'text-[#00ff88]'
+                                  : log.includes('[ERR]') || log.includes('Error')
+                                  ? 'text-[#ff4466]'
+                                  : log.includes('Commit') || log.includes('Reveal')
+                                  ? 'text-[#00d4ff]'
+                                  : 'text-[#666680]'
+                              }`}>{log}</p>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
