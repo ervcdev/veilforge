@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Shield } from 'lucide-react'
 import Link from 'next/link'
-import { createPublicClient, http } from 'viem'
+
 import { useVeilForge } from '@/hooks/useVeilForge'
 
 // Types
@@ -53,62 +53,6 @@ interface BestRate {
   wethOutput: number
 }
 
-interface OnchainAgentStats {
-  address: string
-  registeredAt: bigint
-  slashCount: bigint
-  ordersExecuted: bigint
-  registered: boolean
-  collateral: bigint
-  totalVolume: bigint
-  feesEarned: bigint
-}
-
-// Contracts
-const AGENT_REGISTRY_ADDRESS = '0x22b4710F8219949D98849dAdBecF077a1b0Edc75' as const
-
-const REGISTRY_ABI = [
-  {
-    name: 'getAllAgents',
-    type: 'function',
-    inputs: [],
-    outputs: [{ type: 'address[]' }],
-    stateMutability: 'view',
-  },
-  {
-    name: 'getAgent',
-    type: 'function',
-    inputs: [{ name: 'agent', type: 'address' }],
-    outputs: [{
-      type: 'tuple',
-      components: [
-        { name: 'registeredAt',   type: 'uint64'  },
-        { name: 'slashCount',     type: 'uint64'  },
-        { name: 'ordersExecuted', type: 'uint64'  },
-        { name: 'registered',     type: 'bool'    },
-        { name: 'collateral',     type: 'uint256' },
-        { name: 'totalVolume',    type: 'uint256' },
-        { name: 'feesEarned',     type: 'uint256' },
-      ],
-    }],
-    stateMutability: 'view',
-  },
-] as const
-
-const SOMNIA_CHAIN = {
-  id: 50312,
-  name: 'Somnia Testnet',
-  nativeCurrency: { name: 'STT', symbol: 'STT', decimals: 18 },
-  rpcUrls: { default: { http: ['https://dream-rpc.somnia.network'] } },
-} as const
-
-const publicClient = createPublicClient({
-  chain: SOMNIA_CHAIN,
-  transport: http(),
-})
-
-const STRATEGY_LABELS = ['MARKET MAKER', 'ARBITRAGE', 'CONSERVATIVE'] as const
-const SPREAD_RANGES = ['0.20-0.35%', '0.08-0.40%', '0.60-0.80%'] as const
 const STRATEGY_KEYS = ['marketMaker', 'arbitrage', 'conservative'] as const
 
 // Helpers
@@ -116,19 +60,17 @@ const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)
 const randomHex = (len: number) => Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
 
-function shortenAddress(addr: string): string {
-  if (!addr || addr.length < 10) return addr
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-}
-
 export default function VeilForgeDashboard() {
   const {
     commits: liveCommits,
     reveals: liveReveals,
     ticker: liveTicker,
     metrics: liveMetrics,
-    isConnected,
+    isConnected: onchainConnected,
   } = useVeilForge()
+
+  const [backendOnline, setBackendOnline] = useState(true)
+  const isConnected = onchainConnected && backendOnline
 
   // Mock state (fallback when isConnected is false)
   const [mockCommits, setMockCommits] = useState<CommitRow[]>([])
@@ -163,8 +105,7 @@ export default function VeilForgeDashboard() {
   const statusMode: 'live' | 'demo' = isConnected ? 'live' : 'demo'
   const [now, setNow] = useState(Date.now())
 
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-
+ 
   const [agentRunning, setAgentRunning] = useState<Record<number, boolean>>({
     1: false, 2: false, 3: false
   })
@@ -191,6 +132,7 @@ export default function VeilForgeDashboard() {
         const res = await fetch(`${BACKEND_URL}/api/agents/status`)
         if (!res.ok) return
         const data = await res.json()
+        setBackendOnline(true)
         setAgentRunning({
           1: data.agents?.[1]?.running || false,
           2: data.agents?.[2]?.running || false,
@@ -201,7 +143,7 @@ export default function VeilForgeDashboard() {
           2: data.agents?.[2]?.pid || null,
           3: data.agents?.[3]?.pid || null
         })
-      } catch { /* backend not available */ }
+      } catch { setBackendOnline(false) }
     }
     poll()
     const interval = setInterval(poll, 5000)
@@ -221,6 +163,7 @@ export default function VeilForgeDashboard() {
         try {
           const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
           if (!res.ok) continue
+          setBackendOnline(true)
           const data = await res.json()
           setAgentLogs(prev => ({ ...prev, [idx]: data.logs || [] }))
         } catch { /* silent */ }
@@ -232,129 +175,13 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [logsOpen])
 
-  // ──────────────────────────────────────────────────────────────
-  // IMPROVEMENT 1 — Real onchain agent data
-  // ──────────────────────────────────────────────────────────────
-  const [onchainAgents, setOnchainAgents] = useState<OnchainAgentStats[]>([])
-  const prevOrdersRef = useRef<Record<string, bigint>>({})
-
-  const fetchAgentData = useCallback(async () => {
-    try {
-      const addresses = await publicClient.readContract({
-        address: AGENT_REGISTRY_ADDRESS,
-        abi: REGISTRY_ABI,
-        functionName: 'getAllAgents',
-      }) as string[]
-
-      if (!addresses || addresses.length === 0) return
-
-      const stats = await Promise.all(
-        addresses.map(async (addr) => {
-          const data = await publicClient.readContract({
-            address: AGENT_REGISTRY_ADDRESS,
-            abi: REGISTRY_ABI,
-            functionName: 'getAgent',
-            args: [addr as `0x${string}`],
-          }) as {
-            registeredAt: bigint
-            slashCount: bigint
-            ordersExecuted: bigint
-            registered: boolean
-            collateral: bigint
-            totalVolume: bigint
-            feesEarned: bigint
-          }
-          return { address: addr, ...data }
-        })
-      )
-
-      setOnchainAgents(stats)
-    } catch {
-      // silently fail — demo data continues showing
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchAgentData()
-    const interval = setInterval(fetchAgentData, 10_000)
-    return () => clearInterval(interval)
-  }, [fetchAgentData])
-
-  // Detect which agents had ordersExecuted increase since last poll
-  const [recentlyActiveAgents, setRecentlyActiveAgents] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    if (onchainAgents.length === 0) return
-    const newlyActive = new Set<string>()
-    onchainAgents.forEach(agent => {
-      const prev = prevOrdersRef.current[agent.address]
-      if (prev !== undefined && agent.ordersExecuted > prev) {
-        newlyActive.add(agent.address)
-      }
-      prevOrdersRef.current[agent.address] = agent.ordersExecuted
-    })
-    if (newlyActive.size > 0) {
-      setRecentlyActiveAgents(newlyActive)
-      const timer = setTimeout(() => setRecentlyActiveAgents(new Set()), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [onchainAgents])
-
-  // Build the agent cards: use onchain data when available, fall back to demo
-  const agentCards = useMemo(() => {
-    if (onchainAgents.length > 0) {
-      const maxOrders = Math.max(1, ...onchainAgents.map(a => Number(a.ordersExecuted)))
-      return onchainAgents.slice(0, 3).map((agent, i) => {
-        const feesUsd = Number(agent.feesEarned) / 1e18
-        const orders = Number(agent.ordersExecuted)
-        const isTopAgent = orders === maxOrders && orders > 0
-        // Determine dot color
-        let dotColor = '#ff4466'  // red: not registered or slashed heavily
-        let dotPulse = false
-        if (agent.registered && Number(agent.slashCount) <= 2) {
-          if (recentlyActiveAgents.has(agent.address)) {
-            dotColor = '#00ff88'
-            dotPulse = true
-          } else if (orders > 0) {
-            dotColor = '#00ff88'
-          } else {
-            dotColor = '#ffaa00'
-          }
-        }
-
-        // Last action: find most recent event matching this agent
-        const lastCommit = liveCommits.find(c => c.agent.toLowerCase() === agent.address.toLowerCase())
-        const lastReveal = liveReveals.find(r => r.agent.toLowerCase() === agent.address.toLowerCase())
-        let lastAction = 'No activity yet'
-        if (lastReveal) {
-          lastAction = `${lastReveal.direction} ${parseFloat(lastReveal.amount).toFixed(2)} WETH @ ${parseFloat(lastReveal.price).toFixed(0)}`
-        } else if (lastCommit) {
-          lastAction = `Commit ${lastCommit.hash.slice(0, 10)}...`
-        }
-
-        return {
-          address: agent.address,
-          short: shortenAddress(agent.address),
-          strategy: STRATEGY_LABELS[i] ?? 'UNKNOWN',
-          spreadRange: SPREAD_RANGES[i] ?? '—',
-          orders,
-          feesUsd,
-          activityPct: maxOrders > 0 ? (orders / maxOrders) * 100 : 0,
-          isTopAgent,
-          dotColor,
-          dotPulse,
-          lastAction,
-          registered: agent.registered,
-        }
-      })
-    }
-
-    // Demo fallback
-    return [
-      { address: '0x1234567890abcdef5678', short: '0x1234...5678', strategy: 'MARKET MAKER' as const, spreadRange: '0.20-0.35%', orders: 47, feesUsd: 1247.50, activityPct: 75, isTopAgent: true, dotColor: '#00ff88', dotPulse: false, lastAction: 'BID 1.20 WETH @ 3002', registered: true },
-      { address: '0x8765432109abcdef4321', short: '0x8765...4321', strategy: 'ARBITRAGE' as const, spreadRange: '0.08-0.40%', orders: 31, feesUsd: 892.30, activityPct: 45, isTopAgent: false, dotColor: '#00ff88', dotPulse: false, lastAction: 'ASK 0.85 WETH @ 2998', registered: true },
-      { address: '0xABCDEF0123456789EF01', short: '0xABCD...EF01', strategy: 'CONSERVATIVE' as const, spreadRange: '0.60-0.80%', orders: 18, feesUsd: 234.80, activityPct: 25, isTopAgent: false, dotColor: '#ffaa00', dotPulse: false, lastAction: 'BID 0.40 WETH @ 2995', registered: true },
-    ]
-  }, [onchainAgents, recentlyActiveAgents, liveCommits, liveReveals])
+  // Build the agent cards from static demo fallback (backend polling
+  // enriches agent status via agentRunning / agentPids separately)
+  const agentCards = useMemo(() => [
+    { address: '0x1234567890abcdef5678', short: '0x1234...5678', strategy: 'MARKET MAKER' as const, spreadRange: '0.20-0.35%', orders: 47, feesUsd: 1247.50, activityPct: 75, isTopAgent: true, dotColor: '#00ff88', dotPulse: false, lastAction: 'BID 1.20 WETH @ 3002', registered: true },
+    { address: '0x8765432109abcdef4321', short: '0x8765...4321', strategy: 'ARBITRAGE' as const, spreadRange: '0.08-0.40%', orders: 31, feesUsd: 892.30, activityPct: 45, isTopAgent: false, dotColor: '#00ff88', dotPulse: false, lastAction: 'ASK 0.85 WETH @ 2998', registered: true },
+    { address: '0xABCDEF0123456789EF01', short: '0xABCD...EF01', strategy: 'CONSERVATIVE' as const, spreadRange: '0.60-0.80%', orders: 18, feesUsd: 234.80, activityPct: 25, isTopAgent: false, dotColor: '#ffaa00', dotPulse: false, lastAction: 'BID 0.40 WETH @ 2995', registered: true },
+  ], [])
 
   // Mock agent state for demo simulation
   const [mockAgentOrders, setMockAgentOrders] = useState<Record<string, { orders: number; lastAction: string; activityPct: number }>>({})
@@ -903,7 +730,7 @@ export default function VeilForgeDashboard() {
             </div>
             <span style={{ color: '#1a1a2e' }}>|</span>
             <span className="font-mono-jetbrains text-xs" style={{ color: '#00d4ff' }}>
-              {onchainAgents.length > 0 ? `${onchainAgents.length} AGENTS ACTIVE` : '3 AGENTS ACTIVE'}
+              3 AGENTS ACTIVE
             </span>
             <span style={{ color: '#1a1a2e' }}>|</span>
             <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>◈ MEV PROTECTED</span>
@@ -1172,9 +999,9 @@ export default function VeilForgeDashboard() {
                 const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
                 // In demo mode, merge mock simulation data for orders/lastAction/activity
                 const demoData = mockAgentOrders[agent.address]
-                const displayOrders = onchainAgents.length > 0 ? agent.orders : (demoData?.orders ?? agent.orders)
-                const displayLastAction = onchainAgents.length > 0 ? agent.lastAction : (demoData?.lastAction || agent.lastAction)
-                const displayActivity = onchainAgents.length > 0 ? agent.activityPct : (demoData?.activityPct ?? agent.activityPct)
+                const displayOrders = demoData?.orders ?? agent.orders
+                const displayLastAction = demoData?.lastAction || agent.lastAction
+                const displayActivity = demoData?.activityPct ?? agent.activityPct
 
                 return (
                   <div
@@ -1215,7 +1042,7 @@ export default function VeilForgeDashboard() {
                       <div>
                         <span className="text-xs" style={{ color: '#666680' }}>P&amp;L</span>
                         <span className="font-mono-jetbrains text-xs ml-1" style={{ color: '#00ff88' }}>
-                          +${(onchainAgents.length > 0 ? agent.feesUsd : agent.feesUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          +${agent.feesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div>
