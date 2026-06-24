@@ -6,7 +6,8 @@ import Link from 'next/link'
 
 import { useVeilForge } from '@/hooks/useVeilForge'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
 
 // Types
 interface CommitRow {
@@ -131,7 +132,8 @@ export default function VeilForgeDashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://tu-backend-de-render.onrender.com';
         const res = await fetch(`${BACKEND_URL}/api/agents/status`)
         if (!res.ok) return
         const data = await res.json()
