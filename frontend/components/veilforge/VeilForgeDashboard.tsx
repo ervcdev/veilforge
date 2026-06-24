@@ -131,6 +131,7 @@ export default function VeilForgeDashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
+        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
         const res = await fetch(`${BACKEND_URL}/api/agents/status`)
         if (!res.ok) return
         const data = await res.json()
