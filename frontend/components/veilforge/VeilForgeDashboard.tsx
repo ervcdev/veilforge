@@ -6,6 +6,8 @@ import Link from 'next/link'
 
 import { useVeilForge } from '@/hooks/useVeilForge'
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+
 // Types
 interface CommitRow {
   id: string
@@ -143,7 +145,7 @@ export default function VeilForgeDashboard() {
           2: data.agents?.[2]?.pid || null,
           3: data.agents?.[3]?.pid || null
         })
-      } catch { setBackendOnline(false) }
+      } catch (err) { console.error(err); setBackendOnline(false) }
     }
     poll()
     const interval = setInterval(poll, 5000)
@@ -166,7 +168,7 @@ export default function VeilForgeDashboard() {
           setBackendOnline(true)
           const data = await res.json()
           setAgentLogs(prev => ({ ...prev, [idx]: data.logs || [] }))
-        } catch { /* silent */ }
+        } catch (err) { console.error(err) }
       }
     }
 
@@ -591,7 +593,8 @@ export default function VeilForgeDashboard() {
       setAgentRunning(prev => ({ ...prev, [agentIndex]: true }))
       setAgentPids(prev => ({ ...prev, [agentIndex]: data.pid }))
       setAutoKillAt(prev => ({ ...prev, [agentIndex]: data.autoKillAt }))
-    } catch {
+    } catch (err) {
+      console.error(err);
       window.alert('Cannot reach agent orchestrator. Is the backend running?')
     } finally {
       setStarting(prev => ({ ...prev, [agentIndex]: false }))
@@ -621,7 +624,8 @@ export default function VeilForgeDashboard() {
         setAgentPids(prev => ({ ...prev, [agentIndex]: null }))
         setAutoKillAt(prev => ({ ...prev, [agentIndex]: null }))
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       window.alert('Cannot reach agent orchestrator.')
     }
   }
