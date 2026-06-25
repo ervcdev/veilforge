@@ -7,7 +7,8 @@ import Link from 'next/link'
 import { useVeilForge } from '@/hooks/useVeilForge'
 
 //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
+//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://major-ghosts-do.loca.lt';
 
 // Types
 interface CommitRow {
