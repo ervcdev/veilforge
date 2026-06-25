@@ -19,3 +19,7 @@ dist/
 # OS
 .DS_Store
 .
+
+# Demo scripts runtime files
+.demo-backend.pid
+backend.log

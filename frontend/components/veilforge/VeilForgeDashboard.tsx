@@ -8,7 +8,7 @@ import { useVeilForge } from '@/hooks/useVeilForge'
 
 //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
 //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://stale-parrots-punch.loca.lt';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 // Types
 interface CommitRow {
@@ -579,6 +579,7 @@ export default function VeilForgeDashboard() {
         method:  'POST',
         headers: {
           'Content-Type':         'application/json',
+          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
         },
         body: JSON.stringify({ agentIndex, strategy })
@@ -616,6 +617,7 @@ export default function VeilForgeDashboard() {
         method:  'POST',
         headers: {
           'Content-Type':         'application/json',
+          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
         },
         body: JSON.stringify({ agentIndex })
