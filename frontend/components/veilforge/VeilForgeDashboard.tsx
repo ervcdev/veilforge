@@ -353,7 +353,7 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // ──────────────────────────────────────────────��──────────────
+  // ──────────────────────────────────────────────���──────────────
   // Metric Flashing Helper
   // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
@@ -1047,8 +1047,33 @@ export default function VeilForgeDashboard() {
           
           {/* RIGHT PANEL — AGENT COMPETITION */}
           <div className="w-[30%] flex flex-col min-h-0">
-            <div className="text-xs uppercase tracking-widest font-semibold mb-4 shrink-0" style={{ color: '#666680' }}>AGENT COMPETITION</div>
-            <div className="flex flex-col gap-4 flex-1 overflow-y-auto min-h-0">
+
+            {/* Panel header — matches COMMITS / REVEALS style */}
+            <div
+              className="flex items-center justify-between px-4 py-3 mb-3 shrink-0 rounded-t"
+              style={{ background: '#080810', border: '1px solid #1a1a2e', borderBottom: 'none' }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>
+                  Agent Competition
+                </span>
+                <span
+                  className="font-mono text-xs px-2 py-0.5 rounded-full border"
+                  style={{
+                    background: '#0d0d14',
+                    borderColor: '#1a1a2e',
+                    color: Object.values(agentRunning).filter(Boolean).length > 0 ? '#00d4ff' : '#666680',
+                  }}
+                >
+                  {Object.values(agentRunning).filter(Boolean).length} active
+                </span>
+              </div>
+              <span className="text-xs font-mono" style={{ color: '#666680' }}>
+                auto-kill 30m
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0">
               {agentCards.map((agent, i) => {
                 const agentIndex = i + 1
                 const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
@@ -1056,126 +1081,184 @@ export default function VeilForgeDashboard() {
                 const displayOrders = demoData?.orders ?? agent.orders
                 const displayLastAction = demoData?.lastAction || agent.lastAction
                 const displayActivity = demoData?.activityPct ?? agent.activityPct
+                const isRunning = agentRunning[agentIndex]
+                const isStarting = starting[agentIndex]
 
                 return (
                   <div
                     key={agent.address}
-                    className="rounded-lg p-4 transition-shadow duration-300 shrink-0"
+                    className="rounded transition-all duration-300 shrink-0 overflow-hidden"
                     style={{
                       background: '#0d0d14',
-                      border: '1px solid #1a1a2e',
+                      border: `1px solid ${glowingAgent === agent.address ? '#00d4ff' : '#1a1a2e'}`,
                       boxShadow: glowingAgent === agent.address
-                        ? '0 0 0 1px #00d4ff, 0 0 12px rgba(0, 212, 255, 0.2)'
+                        ? '0 0 0 1px #00d4ff, 0 0 16px rgba(0, 212, 255, 0.15)'
                         : 'none',
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    {/* Card header strip */}
+                    <div
+                      className="flex items-center gap-2 px-4 py-2 border-b"
+                      style={{
+                        background: '#111118',
+                        borderColor: '#1a1a2e',
+                        borderLeft: `3px solid ${isRunning ? '#00ff88' : isStarting ? '#00d4ff' : '#1a1a2e'}`,
+                      }}
+                    >
                       <div
-                        className={`w-2 h-2 rounded-full shrink-0 ${agent.dotPulse ? 'animate-pulse' : ''}`}
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${agent.dotPulse ? 'animate-pulse' : ''}`}
                         style={{ background: agent.dotColor }}
                       />
-                      <span className="font-mono text-xs text-white">{agent.short}</span>
+                      <span className="font-mono text-xs text-white tracking-wider">{agent.short}</span>
                       <span
-                        className="ml-auto text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap"
+                        className="text-xs px-1.5 py-px rounded font-mono whitespace-nowrap"
                         style={{
-                          background: agent.strategy === 'MARKET MAKER' ? 'rgb(30,58,138)' : agent.strategy === 'ARBITRAGE' ? 'rgb(124,45,18)' : 'rgb(88,28,135)',
-                          color: agent.strategy === 'MARKET MAKER' ? 'rgb(147,197,253)' : agent.strategy === 'ARBITRAGE' ? 'rgb(253,186,116)' : 'rgb(216,180,254)',
+                          background: agent.strategy === 'MARKET MAKER'
+                            ? 'rgba(30,58,138,0.6)'
+                            : agent.strategy === 'ARBITRAGE'
+                            ? 'rgba(124,45,18,0.6)'
+                            : 'rgba(88,28,135,0.6)',
+                          color: agent.strategy === 'MARKET MAKER'
+                            ? 'rgb(147,197,253)'
+                            : agent.strategy === 'ARBITRAGE'
+                            ? 'rgb(253,186,116)'
+                            : 'rgb(216,180,254)',
+                          border: `1px solid ${agent.strategy === 'MARKET MAKER' ? 'rgba(147,197,253,0.2)' : agent.strategy === 'ARBITRAGE' ? 'rgba(253,186,116,0.2)' : 'rgba(216,180,254,0.2)'}`,
                         }}
                       >
                         {agent.strategy}
                       </span>
+                      {isRunning && (
+                        <span className="ml-auto flex items-center gap-1 text-xs font-mono" style={{ color: '#00ff88' }}>
+                          <span className="w-1 h-1 rounded-full bg-[#00ff88] animate-pulse inline-block" />
+                          LIVE
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex gap-4 mt-2">
-                      <div>
-                        <span className="text-xs" style={{ color: '#666680' }}>ORDERS</span>
-                        <span className="font-mono text-xs text-white ml-1">{displayOrders.toLocaleString()}</span>
+                    {/* Stats row */}
+                    <div className="px-4 py-2 grid grid-cols-3 gap-2 border-b" style={{ borderColor: '#1a1a2e' }}>
+                      <div className="flex flex-col">
+                        <span className="text-xs uppercase" style={{ color: '#666680', fontSize: '10px', letterSpacing: '0.08em' }}>ORDERS</span>
+                        <span className="font-mono text-xs text-white mt-0.5">{displayOrders.toLocaleString()}</span>
                       </div>
-                      <div>
-                        <span className="text-xs" style={{ color: '#666680' }}>P&amp;L</span>
-                        <span className="font-mono text-xs ml-1" style={{ color: '#00ff88' }}>
+                      <div className="flex flex-col">
+                        <span className="text-xs uppercase" style={{ color: '#666680', fontSize: '10px', letterSpacing: '0.08em' }}>P&amp;L</span>
+                        <span className="font-mono text-xs mt-0.5" style={{ color: '#00ff88' }}>
                           +${agent.feesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div>
-                        <span className="text-xs" style={{ color: '#666680' }}>SPREAD</span>
-                        <span className="font-mono text-xs text-white ml-1">{agent.spreadRange}</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs uppercase" style={{ color: '#666680', fontSize: '10px', letterSpacing: '0.08em' }}>SPREAD</span>
+                        <span className="font-mono text-xs text-white mt-0.5">{agent.spreadRange}</span>
                       </div>
                     </div>
 
-                    <div className="mt-2 h-2 rounded-full" style={{ background: '#1a1a2e' }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          background: agent.isTopAgent ? '#00d4ff' : '#666680',
-                          width: `${Math.max(2, displayActivity)}%`,
-                        }}
-                      />
+                    {/* Activity bar + last action */}
+                    <div className="px-4 py-2 border-b" style={{ borderColor: '#1a1a2e' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span style={{ color: '#666680', fontSize: '10px', letterSpacing: '0.08em' }} className="uppercase">ACTIVITY</span>
+                        <span className="font-mono" style={{ color: '#666680', fontSize: '10px' }}>{displayActivity}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full" style={{ background: '#1a1a2e' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            background: agent.isTopAgent
+                              ? 'linear-gradient(90deg, #00d4ff, #00ff88)'
+                              : '#666680',
+                            width: `${Math.max(2, displayActivity)}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="font-mono truncate mt-1" style={{ color: '#666680', fontSize: '10px' }}>
+                        {displayLastAction}
+                      </div>
                     </div>
 
-                    <div className="font-mono text-xs mt-2 truncate" style={{ color: '#666680' }}>
-                      LAST ACTION: {displayLastAction}
-                    </div>
-
-                    <div className="mt-3 pt-3 border-t border-[#1a1a2e]">
+                    {/* Controls */}
+                    <div className="px-4 py-2">
                       <div className="flex items-center gap-2">
-                        {starting[agentIndex] ? (
-                          <span className="text-xs font-mono text-[#666680] animate-pulse">STARTING...</span>
-                        ) : agentRunning[agentIndex] ? (
+                        {isStarting ? (
+                          <span className="text-xs font-mono text-[#00d4ff] animate-pulse">STARTING...</span>
+                        ) : isRunning ? (
                           <button
                             onClick={() => handleStopAgent(agentIndex)}
-                            className="px-3 py-1 bg-[#ff4466]/20 border border-[#ff4466]/50
-                                       text-[#ff4466] text-xs font-mono rounded hover:bg-[#ff4466]/30 transition-colors"
+                            className="px-3 py-1 text-xs font-mono rounded transition-colors"
+                            style={{
+                              background: 'rgba(255,68,102,0.12)',
+                              border: '1px solid rgba(255,68,102,0.4)',
+                              color: '#ff4466',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,68,102,0.22)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,68,102,0.12)')}
                           >
                             ■ STOP
                           </button>
                         ) : (
                           <button
                             onClick={() => handleStartAgent(agentIndex, strategy)}
-                            className="px-3 py-1 bg-[#00ff88]/20 border border-[#00ff88]/50
-                                       text-[#00ff88] text-xs font-mono rounded hover:bg-[#00ff88]/30 transition-colors"
+                            className="px-3 py-1 text-xs font-mono rounded transition-colors"
+                            style={{
+                              background: 'rgba(0,255,136,0.12)',
+                              border: '1px solid rgba(0,255,136,0.4)',
+                              color: '#00ff88',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,255,136,0.22)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,255,136,0.12)')}
                           >
                             ▶ START
                           </button>
                         )}
 
-                        <span className={`text-xs font-mono ${agentRunning[agentIndex] ? 'text-[#00ff88]' : 'text-[#666680]'}`}>
-                          {agentRunning[agentIndex]
-                            ? `● RUNNING${agentPids[agentIndex] ? ` (PID: ${agentPids[agentIndex]})` : ''}`
-                            : '○ STOPPED'}
-                        </span>
+                        {isRunning && agentPids[agentIndex] && (
+                          <span className="text-xs font-mono" style={{ color: '#666680' }}>
+                            PID:{agentPids[agentIndex]}
+                          </span>
+                        )}
 
                         <button
                           onClick={() => setLogsOpen(prev => ({ ...prev, [agentIndex]: !prev[agentIndex] }))}
-                          className="ml-auto text-xs text-[#666680] hover:text-[#00d4ff] transition-colors font-mono"
+                          className="ml-auto text-xs font-mono transition-colors"
+                          style={{ color: logsOpen[agentIndex] ? '#00d4ff' : '#666680' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#00d4ff')}
+                          onMouseLeave={e => (e.currentTarget.style.color = logsOpen[agentIndex] ? '#00d4ff' : '#666680')}
                         >
                           LOGS {logsOpen[agentIndex] ? '▲' : '▼'}
                         </button>
                       </div>
 
-                      {agentRunning[agentIndex] && autoKillAt[agentIndex] && (
-                        <p className="text-xs text-[#666680] font-mono mt-1">
-                          ⏱ Auto-stop: {new Date(autoKillAt[agentIndex]!).toLocaleTimeString()}
+                      {isRunning && autoKillAt[agentIndex] && (
+                        <p className="text-xs font-mono mt-1" style={{ color: '#666680', fontSize: '10px' }}>
+                          auto-stop {new Date(autoKillAt[agentIndex]!).toLocaleTimeString()}
                         </p>
                       )}
 
                       {logsOpen[agentIndex] && (
-                        <div className="mt-2 bg-[#080810] border border-[#1a1a2e] rounded p-2 h-32 overflow-y-auto">
+                        <div
+                          className="mt-2 rounded p-2 h-28 overflow-y-auto"
+                          style={{ background: '#080810', border: '1px solid #1a1a2e' }}
+                        >
                           {agentLogs[agentIndex].length === 0 ? (
-                            <p className="text-[#666680] text-xs font-mono">
-                              {agentRunning[agentIndex] ? 'Waiting for logs...' : 'Agent is stopped'}
+                            <p className="text-xs font-mono" style={{ color: '#666680' }}>
+                              {isRunning ? 'Waiting for logs...' : 'Agent is stopped'}
                             </p>
                           ) : (
                             agentLogs[agentIndex].map((log, j) => (
-                              <p key={j} className={`text-xs font-mono leading-5 ${
-                                log.includes('✓') || log.includes('exitoso') || log.includes('started')
-                                  ? 'text-[#00ff88]'
-                                  : log.includes('[ERR]') || log.includes('Error')
-                                  ? 'text-[#ff4466]'
-                                  : log.includes('Commit') || log.includes('Reveal')
-                                  ? 'text-[#00d4ff]'
-                                  : 'text-[#666680]'
-                              }`}>{log}</p>
+                              <p
+                                key={j}
+                                className={`text-xs font-mono leading-5 ${
+                                  log.includes('✓') || log.includes('exitoso') || log.includes('started')
+                                    ? 'text-[#00ff88]'
+                                    : log.includes('[ERR]') || log.includes('Error')
+                                    ? 'text-[#ff4466]'
+                                    : log.includes('Commit') || log.includes('Reveal')
+                                    ? 'text-[#00d4ff]'
+                                    : 'text-[#666680]'
+                                }`}
+                              >
+                                {log}
+                              </p>
                             ))
                           )}
                         </div>
