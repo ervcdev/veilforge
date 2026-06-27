@@ -31,8 +31,7 @@ export default function RootLayout({
         style={{ 
           background: '#0a0a0f', 
           color: '#ffffff',
-          overflow: 'hidden',
-          height: '100vh'
+          minHeight: '100vh'
         }}
       >
         {children}

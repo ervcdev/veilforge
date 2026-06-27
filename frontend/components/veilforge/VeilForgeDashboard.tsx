@@ -182,7 +182,7 @@ export default function VeilForgeDashboard() {
 
   // ─────────────────────────────────────────────────────────────
   // POLLING: Agent Logs (every 2 seconds when panel is open)
-  // ───────────────────────────────────────��─────────────────────
+  // ───────────────────────────────────────���─────────────────────
   useEffect(() => {
     const openPanels = Object.entries(logsOpen)
       .filter(([, open]) => open)
@@ -353,7 +353,7 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // ─────────────────────────────────────────────������──────────────
+  // ─────────────────────────────────────────────�������──────────────
   // Metric Flashing Helper
   // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
@@ -853,10 +853,10 @@ export default function VeilForgeDashboard() {
                   <table className="w-full text-xs table-fixed">
                     <thead style={{ background: '#111118' }}>
                       <tr>
-                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AGENT</th>
-                        <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>HASH</th>
-                        <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>BLOCK</th>
-                        <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>STATUS</th>
+                        <th className="text-left p-2 font-normal w-[28%]" style={{ color: '#666680' }}>AGENT</th>
+                        <th className="text-left p-2 font-normal w-[37%]" style={{ color: '#666680' }}>HASH</th>
+                        <th className="text-left p-2 font-normal w-[20%]" style={{ color: '#666680' }}>BLOCK</th>
+                        <th className="text-left p-2 font-normal w-[15%]" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -874,23 +874,19 @@ export default function VeilForgeDashboard() {
                               transition: 'opacity 600ms ease, background-color 150ms ease',
                             }}
                           >
-                            <td className="p-2 font-mono text-xs w-28 whitespace-nowrap" style={{ color: '#666680' }}>{commit.agentShort}</td>
+                            <td className="p-2 font-mono text-xs truncate min-w-0" style={{ color: '#666680' }}>{commit.agentShort}</td>
                             <td
-                              className="p-2 font-mono text-xs transition-all duration-300"
+                              className="p-2 font-mono text-xs truncate min-w-0 transition-all duration-300"
                               style={{
                                 color: '#00d4ff',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: '140px',
                                 textShadow: commit.isNew ? '0 0 8px rgba(0, 212, 255, 0.9)' : 'none',
                                 filter: commit.isNew ? 'brightness(1.4)' : 'brightness(1)',
                               }}
                             >
                               {commit.hashShort}
                             </td>
-                            <td className="p-2 font-mono text-xs w-24 whitespace-nowrap" style={{ color: '#666680' }}>{commit.block}</td>
-                            <td className="p-2 w-20">
+                            <td className="p-2 font-mono text-xs truncate min-w-0" style={{ color: '#666680' }}>{commit.block}</td>
+                            <td className="p-2 truncate min-w-0">
                               <span className="px-1 rounded text-xs" style={{ background: '#1a1a2e', color: '#666680' }}>PENDING</span>
                             </td>
                           </tr>
