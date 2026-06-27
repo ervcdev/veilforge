@@ -182,7 +182,7 @@ export default function VeilForgeDashboard() {
 
   // ─────────────────────────────────────────────────────────────
   // POLLING: Agent Logs (every 2 seconds when panel is open)
-  // ─────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────��─────────────────────
   useEffect(() => {
     const openPanels = Object.entries(logsOpen)
       .filter(([, open]) => open)
@@ -353,7 +353,7 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // ──────────────────────────────────────────────���──────────────
+  // ──────────────────────────────────────────────����──────────────
   // Metric Flashing Helper
   // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
@@ -555,10 +555,10 @@ export default function VeilForgeDashboard() {
       label: 'TPS',
       valueNode: (
         <span className="flex items-center gap-1">
-          <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
+          <span className="font-mono text-2xl font-bold" style={{ color: '#00d4ff' }}>
             {displayMetrics.tps.toLocaleString()}
           </span>
-          <span className="text-xl font-bold" style={{ color: tpsDirection === 'up' ? '#00ff88' : '#ff4466' }}>
+          <span className="text-base font-bold" style={{ color: tpsDirection === 'up' ? '#00ff88' : '#ff4466' }}>
             {tpsDirection === 'up' ? '↑' : '↓'}
           </span>
         </span>
@@ -569,7 +569,7 @@ export default function VeilForgeDashboard() {
       label: 'MATCHES',
       valueNode: (
         <span
-          className={`font-mono text-5xl font-bold ${displayMetrics.matches > 0 ? 'animate-pulse' : ''}`}
+          className={`font-mono text-2xl font-bold ${displayMetrics.matches > 0 ? 'animate-pulse' : ''}`}
           style={{ color: displayMetrics.matches > 0 ? '#00ff88' : '#666680' }}
         >
           {displayMetrics.matches.toLocaleString()}
@@ -580,7 +580,7 @@ export default function VeilForgeDashboard() {
       key: 'volume',
       label: 'VOLUME (USDC)',
       valueNode: (
-        <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
+        <span className="font-mono text-2xl font-bold" style={{ color: '#00d4ff' }}>
           ${displayMetrics.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </span>
       ),
@@ -590,7 +590,7 @@ export default function VeilForgeDashboard() {
       label: 'ACTIVE ORDERS',
       valueNode: (
         <span
-          className="font-mono text-5xl font-bold"
+          className="font-mono text-2xl font-bold"
           style={{ color: displayMetrics.activeOrders > 0 ? 'white' : '#666680' }}
         >
           {displayMetrics.activeOrders.toLocaleString()}
@@ -601,9 +601,9 @@ export default function VeilForgeDashboard() {
       key: 'avgReveal',
       label: 'AVG REVEAL',
       valueNode: (
-        <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
+        <span className="font-mono text-2xl font-bold" style={{ color: '#00d4ff' }}>
           {displayMetrics.avgReveal.toFixed(2)}
-          <span className="text-lg font-normal ml-1" style={{ color: '#666680' }}>ms</span>
+          <span className="text-sm font-normal ml-1" style={{ color: '#666680' }}>ms</span>
         </span>
       ),
     },
@@ -740,9 +740,9 @@ export default function VeilForgeDashboard() {
         </div>
       )}
 
-      <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
+      <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f' }}>
         {/* TOP BAR */}
-        <div className="h-12 flex items-center justify-between px-6" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
+        <div className="h-12 flex items-center justify-between px-4 gap-4 shrink-0" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
           <div className="flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <polygon points="8,1 15,4.5 15,11.5 8,15 1,11.5 1,4.5" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
@@ -814,17 +814,17 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* METRICS BAR */}
-        <div className="flex gap-4 p-4" style={{ background: '#0a0a0f' }}>
+        <div className="flex gap-3 px-4 py-2 shrink-0" style={{ background: '#0a0a0f' }}>
           {metricItems.map(metric => (
             <div
               key={metric.key}
-              className="flex-1 rounded p-4 flex flex-col"
+              className="flex-1 min-w-0 rounded px-3 py-2 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid #1a1a2e', borderTopColor: 'rgba(0, 212, 255, 0.2)' }}
             >
-              <div className="text-xs uppercase leading-tight tracking-widest" style={{ color: '#666680' }}>
+              <div className="text-xs uppercase leading-tight tracking-widest truncate" style={{ color: '#666680' }}>
                 {metric.label}
               </div>
-              <div className="w-8 h-px my-1" style={{ background: '#1a1a2e' }} />
+              <div className="w-6 h-px my-1" style={{ background: '#1a1a2e' }} />
               <div className={`transition-colors duration-200 leading-none ${flashingMetric === metric.key ? 'flash-white' : ''}`}>
                 {metric.valueNode}
               </div>
@@ -833,11 +833,11 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* THREE PANELS */}
-        <div className="flex-1 flex gap-6 px-6 pb-0 overflow-hidden">
+        <div className="flex-1 flex gap-4 px-4 pb-2 overflow-hidden min-h-0">
           {/* LEFT PANEL — COMMITS & REVEALS */}
-          <div className="w-[40%] flex flex-col gap-6 min-h-0">
+          <div className="flex-[4] min-w-0 flex flex-col gap-4 min-h-0">
             {/* COMMITS */}
-            <div className="flex flex-col rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e', maxHeight: '200px' }}>
+            <div className="flex flex-col rounded min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e', maxHeight: '190px' }}>
               <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
@@ -849,14 +849,14 @@ export default function VeilForgeDashboard() {
                   <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Agents cycle every ~8 seconds</span>
                 </div>
               ) : (
-                <div className="overflow-y-auto">
-                  <table className="w-full text-xs">
+                <div className="overflow-y-auto overflow-x-hidden">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="sticky top-0" style={{ background: '#111118' }}>
                       <tr>
-                        <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
-                        <th className="text-left p-2 font-normal" style={{ color: '#666680', maxWidth: '140px' }}>HASH</th>
-                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>BLOCK</th>
-                        <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>STATUS</th>
+                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AGENT</th>
+                        <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>HASH</th>
+                        <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>BLOCK</th>
+                        <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -903,7 +903,7 @@ export default function VeilForgeDashboard() {
             </div>
             
             {/* REVEALS */}
-            <div className="flex-1 flex flex-col rounded min-h-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
+            <div className="flex-1 flex flex-col rounded min-h-0 min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
               <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
@@ -920,15 +920,15 @@ export default function VeilForgeDashboard() {
                   <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Reveals appear ~5 blocks after commit</span>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto min-h-0">
-                  <table className="w-full text-xs">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="sticky top-0" style={{ background: '#111118' }}>
                       <tr>
-                        <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
-                        <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>DIR</th>
-                        <th className="text-left p-2 font-normal w-32" style={{ color: '#666680' }}>PRICE</th>
-                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AMOUNT</th>
-                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>STATUS</th>
+                        <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AGENT</th>
+                        <th className="text-left p-2 font-normal w-12" style={{ color: '#666680' }}>DIR</th>
+                        <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>PRICE</th>
+                        <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>AMOUNT</th>
+                        <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -969,9 +969,9 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* CENTER PANEL - SWAP */}
-          <div className="w-[30%]">
+          <div className="flex-[3] min-w-0 min-h-0 overflow-y-auto">
             <div
-              className="h-full rounded-lg p-6 flex flex-col"
+              className="rounded-lg p-5 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid rgba(0, 212, 255, 0.3)' }}
             >
               <div className="text-xs uppercase tracking-widest font-bold" style={{ color: '#00d4ff' }}>BEST AVAILABLE RATE</div>
@@ -1046,7 +1046,7 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* RIGHT PANEL — AGENT COMPETITION */}
-          <div className="w-[30%] flex flex-col min-h-0">
+          <div className="flex-[3] min-w-0 flex flex-col min-h-0">
 
             {/* Panel header — matches COMMITS / REVEALS style */}
             <div
