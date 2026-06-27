@@ -353,7 +353,7 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // ──────────────────────────────────────────────����──────────────
+  // ─────────────────────────────────────────────������──────────────
   // Metric Flashing Helper
   // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
@@ -740,9 +740,9 @@ export default function VeilForgeDashboard() {
         </div>
       )}
 
-      <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f' }}>
+      <div className="min-h-screen w-full flex flex-col" style={{ background: '#0a0a0f' }}>
         {/* TOP BAR */}
-        <div className="h-12 flex items-center justify-between px-4 gap-4 shrink-0" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
+        <div className="sticky top-0 z-20 h-12 flex items-center justify-between px-4 gap-4" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
           <div className="flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <polygon points="8,1 15,4.5 15,11.5 8,15 1,11.5 1,4.5" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
@@ -814,7 +814,7 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* METRICS BAR */}
-        <div className="flex gap-3 px-4 py-2 shrink-0" style={{ background: '#0a0a0f' }}>
+        <div className="sticky top-12 z-10 flex gap-3 px-4 py-2" style={{ background: '#0a0a0f', borderBottom: '1px solid #1a1a2e' }}>
           {metricItems.map(metric => (
             <div
               key={metric.key}
@@ -833,11 +833,11 @@ export default function VeilForgeDashboard() {
         </div>
         
         {/* THREE PANELS */}
-        <div className="flex-1 flex gap-4 px-4 pb-2 overflow-hidden min-h-0">
+        <div className="flex gap-4 px-4 py-4 items-start">
           {/* LEFT PANEL — COMMITS & REVEALS */}
-          <div className="flex-[4] min-w-0 flex flex-col gap-4 min-h-0">
+          <div className="flex-[4] min-w-0 flex flex-col gap-4">
             {/* COMMITS */}
-            <div className="flex flex-col rounded min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e', maxHeight: '190px' }}>
+            <div className="flex flex-col rounded min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
               <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
@@ -849,9 +849,9 @@ export default function VeilForgeDashboard() {
                   <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Agents cycle every ~8 seconds</span>
                 </div>
               ) : (
-                <div className="overflow-y-auto overflow-x-hidden">
+                <div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="sticky top-0" style={{ background: '#111118' }}>
+                    <thead style={{ background: '#111118' }}>
                       <tr>
                         <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AGENT</th>
                         <th className="text-left p-2 font-normal" style={{ color: '#666680' }}>HASH</th>
@@ -903,7 +903,7 @@ export default function VeilForgeDashboard() {
             </div>
             
             {/* REVEALS */}
-            <div className="flex-1 flex flex-col rounded min-h-0 min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
+            <div className="flex flex-col rounded min-w-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
               <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
@@ -920,9 +920,9 @@ export default function VeilForgeDashboard() {
                   <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Reveals appear ~5 blocks after commit</span>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+                <div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="sticky top-0" style={{ background: '#111118' }}>
+                    <thead style={{ background: '#111118' }}>
                       <tr>
                         <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>AGENT</th>
                         <th className="text-left p-2 font-normal w-12" style={{ color: '#666680' }}>DIR</th>
@@ -969,7 +969,7 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* CENTER PANEL - SWAP */}
-          <div className="flex-[3] min-w-0 min-h-0 overflow-y-auto">
+          <div className="flex-[3] min-w-0">
             <div
               className="rounded-lg p-5 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid rgba(0, 212, 255, 0.3)' }}
@@ -1046,7 +1046,7 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* RIGHT PANEL — AGENT COMPETITION */}
-          <div className="flex-[3] min-w-0 flex flex-col min-h-0">
+          <div className="flex-[3] min-w-0 flex flex-col">
 
             {/* Panel header — matches COMMITS / REVEALS style */}
             <div
@@ -1073,7 +1073,7 @@ export default function VeilForgeDashboard() {
               </span>
             </div>
 
-            <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0">
+            <div className="flex flex-col gap-3">
               {agentCards.map((agent, i) => {
                 const agentIndex = i + 1
                 const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
@@ -1236,7 +1236,7 @@ export default function VeilForgeDashboard() {
 
                       {logsOpen[agentIndex] && (
                         <div
-                          className="mt-2 rounded p-2 h-28 overflow-y-auto"
+                          className="mt-2 rounded p-2"
                           style={{ background: '#080810', border: '1px solid #1a1a2e' }}
                         >
                           {agentLogs[agentIndex].length === 0 ? (
@@ -1273,7 +1273,7 @@ export default function VeilForgeDashboard() {
         
         {/* BOTTOM TICKER */}
         <div
-          className="h-14 flex items-center shrink-0"
+          className="sticky bottom-0 z-20 h-14 flex items-center"
           style={{ background: '#080810', borderTop: '1px solid #1a1a2e' }}
         >
           <div
