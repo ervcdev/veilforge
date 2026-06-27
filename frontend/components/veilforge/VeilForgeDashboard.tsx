@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Shield } from 'lucide-react'
@@ -6,11 +6,16 @@ import Link from 'next/link'
 
 import { useVeilForge } from '@/hooks/useVeilForge'
 
-//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
+// ─────────────────────────────────────────────────────────────
+// CONFIG & ENVIRONMENT
+// ─────────────────────────────────────────────────────────────
+const BACKEND_URL = typeof window !== 'undefined' 
+  ? process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+  : 'http://localhost:3001'
 
-// Types
+// ─────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────
 interface CommitRow {
   id: string
   agent: string
@@ -57,13 +62,28 @@ interface BestRate {
   wethOutput: number
 }
 
-const STRATEGY_KEYS = ['marketMaker', 'arbitrage', 'conservative'] as const
-
-// Helpers
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const randomHex = (len: number) => Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
 
+// Helper para fetch seguro con headers CORS
+const safeFetch = async (url: string, options?: RequestInit) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
+    ...options?.headers,
+  }
+  return fetch(url, { ...options, headers })
+}
+
+const STRATEGY_KEYS = ['marketMaker', 'arbitrage', 'conservative'] as const
+
+// ─────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────
 export default function VeilForgeDashboard() {
   const {
     commits: liveCommits,
@@ -76,7 +96,7 @@ export default function VeilForgeDashboard() {
   const [backendOnline, setBackendOnline] = useState(true)
   const isConnected = onchainConnected && backendOnline
 
-  // Mock state (fallback when isConnected is false)
+  // Demo mock state (fallback cuando no estamos conectados on-chain)
   const [mockCommits, setMockCommits] = useState<CommitRow[]>([])
   const [mockReveals, setMockReveals] = useState<RevealRow[]>([])
   const [mockTicker, setMockTicker] = useState<TickerEvent[]>([])
@@ -109,7 +129,6 @@ export default function VeilForgeDashboard() {
   const statusMode: 'live' | 'demo' = isConnected ? 'live' : 'demo'
   const [now, setNow] = useState(Date.now())
 
- 
   const [agentRunning, setAgentRunning] = useState<Record<number, boolean>>({
     1: false, 2: false, 3: false
   })
@@ -128,14 +147,16 @@ export default function VeilForgeDashboard() {
   const [autoKillAt, setAutoKillAt] = useState<Record<number, string | null>>({
     1: null, 2: null, 3: null
   })
+  const [mockAgentOrders, setMockAgentOrders] = useState<Record<string, { orders: number; lastAction: string; activityPct: number }>>({})
 
-  // Status every 5 seconds
+  // ─────────────────────────────────────────────────────────────
+  // POLLING: Agent Status (every 5 seconds)
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const poll = async () => {
       try {
-        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://tu-backend-de-render.onrender.com';
-        const res = await fetch(`${BACKEND_URL}/api/agents/status`)
+        if (!BACKEND_URL) return
+        const res = await safeFetch(`${BACKEND_URL}/api/agents/status`)
         if (!res.ok) return
         const data = await res.json()
         setBackendOnline(true)
@@ -149,14 +170,19 @@ export default function VeilForgeDashboard() {
           2: data.agents?.[2]?.pid || null,
           3: data.agents?.[3]?.pid || null
         })
-      } catch (err) { console.error(err); setBackendOnline(false) }
+      } catch (err) {
+        console.error('[v0] Agent status poll error:', err)
+        setBackendOnline(false)
+      }
     }
     poll()
     const interval = setInterval(poll, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  // Logs every 2 seconds when panel is open
+  // ─────────────────────────────────────────────────────────────
+  // POLLING: Agent Logs (every 2 seconds when panel is open)
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const openPanels = Object.entries(logsOpen)
       .filter(([, open]) => open)
@@ -167,12 +193,14 @@ export default function VeilForgeDashboard() {
     const poll = async () => {
       for (const idx of openPanels) {
         try {
-          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
+          const res = await safeFetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
           if (!res.ok) continue
           setBackendOnline(true)
           const data = await res.json()
           setAgentLogs(prev => ({ ...prev, [idx]: data.logs || [] }))
-        } catch (err) { console.error(err) }
+        } catch (err) {
+          console.error('[v0] Agent logs poll error:', err)
+        }
       }
     }
 
@@ -181,18 +209,18 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [logsOpen])
 
-  // Build the agent cards from static demo fallback (backend polling
-  // enriches agent status via agentRunning / agentPids separately)
+  // ─────────────────────────────────────────────────────────────
+  // Agent Cards (static demo data)
+  // ─────────────────────────────────────────────────────────────
   const agentCards = useMemo(() => [
     { address: '0x1234567890abcdef5678', short: '0x1234...5678', strategy: 'MARKET MAKER' as const, spreadRange: '0.20-0.35%', orders: 47, feesUsd: 1247.50, activityPct: 75, isTopAgent: true, dotColor: '#00ff88', dotPulse: false, lastAction: 'BID 1.20 WETH @ 3002', registered: true },
     { address: '0x8765432109abcdef4321', short: '0x8765...4321', strategy: 'ARBITRAGE' as const, spreadRange: '0.08-0.40%', orders: 31, feesUsd: 892.30, activityPct: 45, isTopAgent: false, dotColor: '#00ff88', dotPulse: false, lastAction: 'ASK 0.85 WETH @ 2998', registered: true },
     { address: '0xABCDEF0123456789EF01', short: '0xABCD...EF01', strategy: 'CONSERVATIVE' as const, spreadRange: '0.60-0.80%', orders: 18, feesUsd: 234.80, activityPct: 25, isTopAgent: false, dotColor: '#ffaa00', dotPulse: false, lastAction: 'BID 0.40 WETH @ 2995', registered: true },
   ], [])
 
-  // Mock agent state for demo simulation
-  const [mockAgentOrders, setMockAgentOrders] = useState<Record<string, { orders: number; lastAction: string; activityPct: number }>>({})
-  // Demo glow (separate from onchain)
-
+  // ─────────────────────────────────────────────────────────────
+  // Connection Timeout Detection
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isConnected) return
     const timer = setTimeout(() => setConnectionTimedOut(true), 10_000)
@@ -203,9 +231,11 @@ export default function VeilForgeDashboard() {
     return () => clearTimeout(timer)
   }, [isConnected, contractsConfigured])
 
-  const showBanner =
-    (!contractsConfigured || connectionTimedOut) && !bannerDismissed
+  const showBanner = (!contractsConfigured || connectionTimedOut) && !bannerDismissed
 
+  // ─────────────────────────────────────────────────────────────
+  // Display Logic (live vs mock)
+  // ─────────────────────────────────────────────────────────────
   const displayBlockNumber =
     isConnected && liveMetrics.blockNumber > 0
       ? liveMetrics.blockNumber
@@ -251,7 +281,9 @@ export default function VeilForgeDashboard() {
     }
   }, [isConnected, metrics, liveMetrics])
 
-  // Live block flash when connected to chain
+  // ─────────────────────────────────────────────────────────────
+  // Block Updates (live flash effect)
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isConnected && liveMetrics.blockNumber > 0) {
       blockNumberRef.current = liveMetrics.blockNumber
@@ -262,7 +294,9 @@ export default function VeilForgeDashboard() {
     }
   }, [isConnected, liveMetrics.blockNumber])
 
-  // Demo mode: simulated block counter
+  // ─────────────────────────────────────────────────────────────
+  // Demo Mode: Simulated block counter (when disconnected)
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isConnected) return
     const interval = setInterval(() => {
@@ -278,7 +312,9 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [isConnected])
 
-  // Live metrics: refresh TPS on new blocks
+  // ─────────────────────────────────────────────────────────────
+  // Live Metrics: Refresh TPS on new blocks
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isConnected) return
     setMetrics(prev => ({
@@ -287,7 +323,9 @@ export default function VeilForgeDashboard() {
     }))
   }, [isConnected, liveMetrics.blockNumber])
 
-  // Track TPS direction since last change
+  // ─────────────────────────────────────────────────────────────
+  // TPS Direction Tracking
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const tps = displayMetrics.tps
     if (tps !== prevTpsRef.current) {
@@ -296,7 +334,9 @@ export default function VeilForgeDashboard() {
     }
   }, [displayMetrics.tps])
 
-  // Best rate update
+  // ─────────────────────────────────────────────────────────────
+  // Best Rate Updates
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const cards = agentCards
     if (cards.length === 0) return
@@ -313,13 +353,17 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // Flash metric helper
+  // ─────────────────────────────────────────────────────────────
+  // Metric Flashing Helper
+  // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
     setFlashingMetric(metricName)
     setTimeout(() => setFlashingMetric(null), 200)
   }, [])
 
-  // Main simulation cycle — only when not connected to live contract
+  // ─────────────────────────────────────────────────────────────
+  // Main Demo Simulation Cycle
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isConnected) return
 
@@ -379,7 +423,6 @@ export default function VeilForgeDashboard() {
             activityPct: Math.min(100, entry.activityPct + 5),
           },
         }
-        // Decay others
         demoAddresses.forEach(a => {
           if (a !== agentAddr && updated[a]) {
             updated[a] = { ...updated[a], activityPct: Math.max(10, updated[a].activityPct - 2) }
@@ -503,16 +546,16 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [flashMetric, isConnected])
 
-  // ──────────────────────────────────────────────────────────────
-  // IMPROVEMENT 2 — Metric display helpers
-  // ──────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // Metric Items Display
+  // ─────────────────────────────────────────────────────────────
   const metricItems = [
     {
       key: 'tps',
       label: 'TPS',
       valueNode: (
         <span className="flex items-center gap-1">
-          <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+          <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
             {displayMetrics.tps.toLocaleString()}
           </span>
           <span className="text-xl font-bold" style={{ color: tpsDirection === 'up' ? '#00ff88' : '#ff4466' }}>
@@ -526,7 +569,7 @@ export default function VeilForgeDashboard() {
       label: 'MATCHES',
       valueNode: (
         <span
-          className={`font-mono-jetbrains text-5xl font-bold ${displayMetrics.matches > 0 ? 'animate-pulse' : ''}`}
+          className={`font-mono text-5xl font-bold ${displayMetrics.matches > 0 ? 'animate-pulse' : ''}`}
           style={{ color: displayMetrics.matches > 0 ? '#00ff88' : '#666680' }}
         >
           {displayMetrics.matches.toLocaleString()}
@@ -537,7 +580,7 @@ export default function VeilForgeDashboard() {
       key: 'volume',
       label: 'VOLUME (USDC)',
       valueNode: (
-        <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+        <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
           ${displayMetrics.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </span>
       ),
@@ -547,7 +590,7 @@ export default function VeilForgeDashboard() {
       label: 'ACTIVE ORDERS',
       valueNode: (
         <span
-          className="font-mono-jetbrains text-5xl font-bold"
+          className="font-mono text-5xl font-bold"
           style={{ color: displayMetrics.activeOrders > 0 ? 'white' : '#666680' }}
         >
           {displayMetrics.activeOrders.toLocaleString()}
@@ -558,7 +601,7 @@ export default function VeilForgeDashboard() {
       key: 'avgReveal',
       label: 'AVG REVEAL',
       valueNode: (
-        <span className="font-mono-jetbrains text-5xl font-bold" style={{ color: '#00d4ff' }}>
+        <span className="font-mono text-5xl font-bold" style={{ color: '#00d4ff' }}>
           {displayMetrics.avgReveal.toFixed(2)}
           <span className="text-lg font-normal ml-1" style={{ color: '#666680' }}>ms</span>
         </span>
@@ -566,6 +609,9 @@ export default function VeilForgeDashboard() {
     },
   ]
 
+  // ─────────────────────────────────────────────────────────────
+  // Agent Actions
+  // ─────────────────────────────────────────────────────────────
   const handleStartAgent = async (agentIndex: number, strategy: string) => {
     const accessCode = window.prompt(
       `VeilForge Judge Access\n\nEnter access code to start Agent #${agentIndex} (${strategy}):`
@@ -575,14 +621,12 @@ export default function VeilForgeDashboard() {
     setStarting(prev => ({ ...prev, [agentIndex]: true }))
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agents/start`, {
-        method:  'POST',
+      const res = await safeFetch(`${BACKEND_URL}/api/agents/start`, {
+        method: 'POST',
+        body: JSON.stringify({ agentIndex, strategy }),
         headers: {
-          'Content-Type':         'application/json',
-          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
-        },
-        body: JSON.stringify({ agentIndex, strategy })
+        }
       })
       const data = await res.json()
 
@@ -596,10 +640,10 @@ export default function VeilForgeDashboard() {
       }
 
       setAgentRunning(prev => ({ ...prev, [agentIndex]: true }))
-      setAgentPids(prev => ({ ...prev, [agentIndex]: data.pid }))
+      setAgentPids(prev => ({ ...prev, [agentIndex]: data.pid || null }))
       setAutoKillAt(prev => ({ ...prev, [agentIndex]: data.autoKillAt }))
     } catch (err) {
-      console.error(err);
+      console.error('[v0] Start agent error:', err)
       window.alert('Cannot reach agent orchestrator. Is the backend running?')
     } finally {
       setStarting(prev => ({ ...prev, [agentIndex]: false }))
@@ -613,33 +657,37 @@ export default function VeilForgeDashboard() {
     if (!accessCode) return
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agents/stop`, {
-        method:  'POST',
+      const res = await safeFetch(`${BACKEND_URL}/api/agents/stop`, {
+        method: 'POST',
+        body: JSON.stringify({ agentIndex }),
         headers: {
-          'Content-Type':         'application/json',
-          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
-        },
-        body: JSON.stringify({ agentIndex })
+        }
       })
       const data = await res.json()
 
-      if (res.status === 401) { window.alert('Invalid access code.'); return }
+      if (res.status === 401) {
+        window.alert('Invalid access code.')
+        return
+      }
       if (data.success) {
         setAgentRunning(prev => ({ ...prev, [agentIndex]: false }))
         setAgentPids(prev => ({ ...prev, [agentIndex]: null }))
         setAutoKillAt(prev => ({ ...prev, [agentIndex]: null }))
       }
     } catch (err) {
-      console.error(err);
+      console.error('[v0] Stop agent error:', err)
       window.alert('Cannot reach agent orchestrator.')
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
-        .font-mono-jetbrains { font-family: 'JetBrains Mono', monospace; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
         @keyframes ticker {
           from { transform: translateX(0); }
           to { transform: translateX(-50%); }
@@ -671,7 +719,7 @@ export default function VeilForgeDashboard() {
 
       {showBanner && (
         <div
-          className="flex items-center justify-between gap-3 px-4 py-2 font-mono-jetbrains text-xs"
+          className="flex items-center justify-between gap-3 px-4 py-2 font-mono text-xs"
           style={{ background: '#2a1f00', borderBottom: '1px solid #7a5200', color: '#ffcc44' }}
           role="alert"
         >
@@ -695,21 +743,20 @@ export default function VeilForgeDashboard() {
       <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
         {/* TOP BAR */}
         <div className="h-12 flex items-center justify-between px-6" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
-          {/* Logo */}
           <div className="flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <polygon points="8,1 15,4.5 15,11.5 8,15 1,11.5 1,4.5" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
             </svg>
-            <div className="font-mono-jetbrains font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
+            <div className="font-mono font-bold text-xl" style={{ color: '#00d4ff' }}>VEILFORGE</div>
           </div>
-          {/* Network */}
+
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-yellow-400 animate-pulse'}`} />
-            <span className="text-sm font-mono-jetbrains" style={{ color: '#666680' }}>
+            <span className="text-sm font-mono" style={{ color: '#666680' }}>
               {isConnected ? 'SOMNIA TESTNET' : 'DEMO MODE'}
             </span>
           </div>
-          {/* Right cluster */}
+
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span
@@ -717,7 +764,7 @@ export default function VeilForgeDashboard() {
                 style={{ background: statusMode === 'live' ? '#00ff88' : '#ffcc44' }}
               />
               <span
-                className="font-mono-jetbrains text-xs uppercase"
+                className="font-mono text-xs uppercase"
                 style={{ color: statusMode === 'live' ? '#00ff88' : '#ffcc44' }}
               >
                 {statusMode === 'live' ? 'LIVE' : 'DEMO'}
@@ -730,7 +777,7 @@ export default function VeilForgeDashboard() {
                 style={{ background: isConnected ? '#00ff88' : '#666680' }}
               />
               <span
-                className="font-mono-jetbrains text-xs transition-colors duration-200"
+                className="font-mono text-xs transition-colors duration-200"
                 style={{ color: blockFlash ? '#00d4ff' : 'white' }}
               >
                 {!isConnected && contractsConfigured && !connectionTimedOut
@@ -739,24 +786,26 @@ export default function VeilForgeDashboard() {
               </span>
             </div>
             <span style={{ color: '#1a1a2e' }}>|</span>
-            <span className="font-mono-jetbrains text-xs" style={{ color: '#00d4ff' }}>
+            <span className="font-mono text-xs" style={{ color: '#00d4ff' }}>
               3 AGENTS ACTIVE
             </span>
             <span style={{ color: '#1a1a2e' }}>|</span>
-            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>◈ MEV PROTECTED</span>
+            <span className="font-mono text-xs" style={{ color: '#666680' }}>◈ MEV PROTECTED</span>
             <Link
               href="/audit"
-              className="font-mono-jetbrains text-xs px-2 py-1 rounded border transition-all"
+              className="font-mono text-xs px-2 py-1 rounded border transition-all"
               style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
-                ;(e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
-                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#00d4ff'
+                const target = e.currentTarget as HTMLAnchorElement
+                target.style.background = '#0d0d14'
+                target.style.color = '#00d4ff'
+                target.style.borderColor = '#00d4ff'
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = '#0d0d14'
-                ;(e.currentTarget as HTMLAnchorElement).style.color = '#666680'
-                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = '#1a1a2e'
+                const target = e.currentTarget as HTMLAnchorElement
+                target.style.background = '#0d0d14'
+                target.style.color = '#666680'
+                target.style.borderColor = '#1a1a2e'
               }}
             >
               AUDIT
@@ -764,7 +813,7 @@ export default function VeilForgeDashboard() {
           </div>
         </div>
         
-        {/* ── IMPROVEMENT 2 — METRICS BAR ── */}
+        {/* METRICS BAR */}
         <div className="flex gap-4 p-4" style={{ background: '#0a0a0f' }}>
           {metricItems.map(metric => (
             <div
@@ -785,14 +834,13 @@ export default function VeilForgeDashboard() {
         
         {/* THREE PANELS */}
         <div className="flex-1 flex gap-6 px-6 pb-0 overflow-hidden">
-          {/* ── LEFT PANEL — COMMITS & REVEALS ── */}
+          {/* LEFT PANEL — COMMITS & REVEALS */}
           <div className="w-[40%] flex flex-col gap-6">
-
             {/* COMMITS */}
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
               <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
-                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
+                <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
               </div>
               <div className="flex-1 overflow-hidden">
                 {displayCommits.length === 0 ? (
@@ -826,9 +874,9 @@ export default function VeilForgeDashboard() {
                               transition: 'opacity 600ms ease, background-color 150ms ease',
                             }}
                           >
-                            <td className="p-2 font-mono-jetbrains text-xs w-28" style={{ color: '#666680' }}>{commit.agentShort}</td>
+                            <td className="p-2 font-mono text-xs w-28" style={{ color: '#666680' }}>{commit.agentShort}</td>
                             <td
-                              className="p-2 font-mono-jetbrains text-xs transition-all duration-300 max-w-0"
+                              className="p-2 font-mono text-xs transition-all duration-300 max-w-0"
                               style={{
                                 color: '#00d4ff',
                                 overflow: 'hidden',
@@ -841,7 +889,7 @@ export default function VeilForgeDashboard() {
                             >
                               {commit.hashShort}
                             </td>
-                            <td className="p-2 font-mono-jetbrains text-xs w-24" style={{ color: '#666680' }}>{commit.block}</td>
+                            <td className="p-2 font-mono text-xs w-24" style={{ color: '#666680' }}>{commit.block}</td>
                             <td className="p-2 w-20">
                               <span className="px-1 rounded text-xs" style={{ background: '#1a1a2e', color: '#666680' }}>PENDING</span>
                             </td>
@@ -858,8 +906,8 @@ export default function VeilForgeDashboard() {
             <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
               <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
-                <span className="ml-2 font-mono-jetbrains text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
-                <span className="ml-auto text-xs font-mono-jetbrains" style={{ background: '#1a1a2e', borderRadius: '0.25rem', padding: '0 6px' }}>
+                <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
+                <span className="ml-auto text-xs font-mono" style={{ background: '#1a1a2e', borderRadius: '0.25rem', padding: '0 6px' }}>
                   <span style={{ color: '#00ff88' }}>{displayReveals.filter(r => r.direction === 'BID').length} BID</span>
                   <span style={{ color: '#666680' }}> / </span>
                   <span style={{ color: '#ff4466' }}>{displayReveals.filter(r => r.direction === 'ASK').length} ASK</span>
@@ -894,7 +942,7 @@ export default function VeilForgeDashboard() {
                             borderLeft: `2px solid ${reveal.matching ? '#00d4ff' : reveal.direction === 'BID' ? '#00ff88' : '#ff4466'}`,
                           }}
                         >
-                          <td className="p-2 font-mono-jetbrains text-xs w-28" style={{ color: '#666680' }}>{reveal.agentShort}</td>
+                          <td className="p-2 font-mono text-xs w-28" style={{ color: '#666680' }}>{reveal.agentShort}</td>
                           <td className="p-2 w-16">
                             <span
                               className="px-1 rounded text-xs"
@@ -906,8 +954,8 @@ export default function VeilForgeDashboard() {
                               {reveal.direction}
                             </span>
                           </td>
-                          <td className="p-2 font-mono-jetbrains text-xs w-32 text-white">{reveal.price.toFixed(2)} USDC</td>
-                          <td className="p-2 font-mono-jetbrains text-xs w-24" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
+                          <td className="p-2 font-mono text-xs w-32 text-white">{reveal.price.toFixed(2)} USDC</td>
+                          <td className="p-2 font-mono text-xs w-24" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
                           <td className="p-2 w-24">
                             <span className="px-1 rounded text-xs" style={{ background: '#001a22', color: '#00d4ff' }}>REVEALED</span>
                           </td>
@@ -937,7 +985,7 @@ export default function VeilForgeDashboard() {
                     value={inputAmount}
                     onChange={(e) => setInputAmount(e.target.value)}
                     placeholder="0.00"
-                    className="w-full p-3 rounded font-mono-jetbrains text-xl text-white outline-none"
+                    className="w-full p-3 rounded font-mono text-xl text-white outline-none"
                     style={{ background: '#111118', border: '1px solid #1a1a2e' }}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#666680' }}>USDC</span>
@@ -947,40 +995,37 @@ export default function VeilForgeDashboard() {
               <div className="mt-4">
                 <label className="text-xs" style={{ color: '#666680' }}>YOU RECEIVE</label>
                 <div
-                  className="relative mt-1 p-3 rounded font-mono-jetbrains text-xl text-white"
+                  className="relative mt-1 p-3 rounded font-mono text-xl text-white"
                   style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
                 >
                   {bestRate.wethOutput.toFixed(6)}
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#666680' }}>WETH</span>
                 </div>
-                {/* Rate comparison row */}
                 <div className="flex justify-between text-xs mt-2">
                   <span style={{ color: '#666680' }}>Best agent</span>
-                  <span className="font-mono-jetbrains" style={{ color: '#00d4ff' }}>
+                  <span className="font-mono" style={{ color: '#00d4ff' }}>
                     via Agent-{bestRate.agentShort} | spread: {bestRate.spread.toFixed(2)}%
                   </span>
                 </div>
               </div>
 
-              {/* Pulse button */}
               <button
                 className="swap-pulse-btn w-full mt-5 py-3.5 font-bold rounded-lg text-base uppercase tracking-widest transition-colors cursor-pointer"
                 style={{ background: '#00d4ff', color: '#0a0a0f' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#00b8d9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#00d4ff'}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.background = '#00b8d9'}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.background = '#00d4ff'}
               >
                 SWAP NOW
               </button>
 
-              {/* MEV protection stats */}
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
                   <div className="text-xs" style={{ color: '#666680' }}>Commit Phase</div>
-                  <div className="font-mono-jetbrains text-xs text-white">Hash only</div>
+                  <div className="font-mono text-xs text-white">Hash only</div>
                 </div>
                 <div className="rounded p-2 text-center" style={{ background: '#080810' }}>
                   <div className="text-xs" style={{ color: '#666680' }}>MEV Exposure</div>
-                  <div className="font-mono-jetbrains text-xs" style={{ color: '#00ff88' }}>0%</div>
+                  <div className="font-mono text-xs" style={{ color: '#00ff88' }}>0%</div>
                 </div>
               </div>
 
@@ -1000,14 +1045,13 @@ export default function VeilForgeDashboard() {
             </div>
           </div>
           
-          {/* ── RIGHT PANEL — AGENT COMPETITION ── */}
+          {/* RIGHT PANEL — AGENT COMPETITION */}
           <div className="w-[30%] flex flex-col">
             <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
             <div className="flex flex-col gap-4 flex-1">
               {agentCards.map((agent, i) => {
                 const agentIndex = i + 1
                 const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
-                // In demo mode, merge mock simulation data for orders/lastAction/activity
                 const demoData = mockAgentOrders[agent.address]
                 const displayOrders = demoData?.orders ?? agent.orders
                 const displayLastAction = demoData?.lastAction || agent.lastAction
@@ -1025,13 +1069,12 @@ export default function VeilForgeDashboard() {
                         : 'none',
                     }}
                   >
-                    {/* Header row */}
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-2 h-2 rounded-full shrink-0 ${agent.dotPulse ? 'animate-pulse' : ''}`}
                         style={{ background: agent.dotColor }}
                       />
-                      <span className="font-mono-jetbrains text-xs text-white">{agent.short}</span>
+                      <span className="font-mono text-xs text-white">{agent.short}</span>
                       <span
                         className="ml-auto text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap"
                         style={{
@@ -1043,25 +1086,23 @@ export default function VeilForgeDashboard() {
                       </span>
                     </div>
 
-                    {/* Stats row */}
                     <div className="flex gap-4 mt-2">
                       <div>
                         <span className="text-xs" style={{ color: '#666680' }}>ORDERS</span>
-                        <span className="font-mono-jetbrains text-xs text-white ml-1">{displayOrders.toLocaleString()}</span>
+                        <span className="font-mono text-xs text-white ml-1">{displayOrders.toLocaleString()}</span>
                       </div>
                       <div>
                         <span className="text-xs" style={{ color: '#666680' }}>P&amp;L</span>
-                        <span className="font-mono-jetbrains text-xs ml-1" style={{ color: '#00ff88' }}>
+                        <span className="font-mono text-xs ml-1" style={{ color: '#00ff88' }}>
                           +${agent.feesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div>
                         <span className="text-xs" style={{ color: '#666680' }}>SPREAD</span>
-                        <span className="font-mono-jetbrains text-xs text-white ml-1">{agent.spreadRange}</span>
+                        <span className="font-mono text-xs text-white ml-1">{agent.spreadRange}</span>
                       </div>
                     </div>
 
-                    {/* Activity bar */}
                     <div className="mt-2 h-2 rounded-full" style={{ background: '#1a1a2e' }}>
                       <div
                         className="h-full rounded-full transition-all duration-500"
@@ -1072,8 +1113,7 @@ export default function VeilForgeDashboard() {
                       />
                     </div>
 
-                    {/* Last action */}
-                    <div className="font-mono-jetbrains text-xs mt-2 truncate" style={{ color: '#666680' }}>
+                    <div className="font-mono text-xs mt-2 truncate" style={{ color: '#666680' }}>
                       LAST ACTION: {displayLastAction}
                     </div>
 
@@ -1153,15 +1193,13 @@ export default function VeilForgeDashboard() {
           className="h-14 flex items-center shrink-0"
           style={{ background: '#080810', borderTop: '1px solid #1a1a2e' }}
         >
-          {/* LIVE label */}
           <div
             className="flex items-center gap-2 px-4 h-full shrink-0"
             style={{ borderRight: '1px solid #1a1a2e' }}
           >
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ff4466' }} />
-            <span className="font-mono-jetbrains text-xs" style={{ color: '#666680' }}>LIVE</span>
+            <span className="font-mono text-xs" style={{ color: '#666680' }}>LIVE</span>
           </div>
-          {/* Scrolling feed */}
           <div className="flex-1 overflow-hidden">
             <div className="animate-ticker flex gap-10 whitespace-nowrap items-center">
               {[...displayTicker, ...displayTicker].map((event, i) => (
