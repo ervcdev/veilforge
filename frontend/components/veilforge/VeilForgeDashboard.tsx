@@ -353,7 +353,7 @@ export default function VeilForgeDashboard() {
     return () => clearInterval(interval)
   }, [inputAmount, agentCards])
 
-  // ─────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────��──────────────
   // Metric Flashing Helper
   // ─────────────────────────────────────────────────────────────
   const flashMetric = useCallback((metricName: string) => {
@@ -835,26 +835,26 @@ export default function VeilForgeDashboard() {
         {/* THREE PANELS */}
         <div className="flex-1 flex gap-6 px-6 pb-0 overflow-hidden">
           {/* LEFT PANEL — COMMITS & REVEALS */}
-          <div className="w-[40%] flex flex-col gap-6">
+          <div className="w-[40%] flex flex-col gap-6 min-h-0">
             {/* COMMITS */}
-            <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+            <div className="flex flex-col rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e', maxHeight: '200px' }}>
+              <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>COMMITS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayCommits.length}</span>
               </div>
-              <div className="flex-1 overflow-hidden">
-                {displayCommits.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
-                    <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>⬡</span>
-                    <span className="text-xs">Waiting for agent commits</span>
-                    <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Agents cycle every ~8 seconds</span>
-                  </div>
-                ) : (
+              {displayCommits.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
+                  <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>⬡</span>
+                  <span className="text-xs">Waiting for agent commits</span>
+                  <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Agents cycle every ~8 seconds</span>
+                </div>
+              ) : (
+                <div className="overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ background: '#111118' }}>
+                    <thead className="sticky top-0" style={{ background: '#111118' }}>
+                      <tr>
                         <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
-                        <th className="text-left p-2 font-normal" style={{ color: '#666680', width: '100%' }}>HASH</th>
+                        <th className="text-left p-2 font-normal" style={{ color: '#666680', maxWidth: '140px' }}>HASH</th>
                         <th className="text-left p-2 font-normal w-24" style={{ color: '#666680' }}>BLOCK</th>
                         <th className="text-left p-2 font-normal w-20" style={{ color: '#666680' }}>STATUS</th>
                       </tr>
@@ -874,22 +874,22 @@ export default function VeilForgeDashboard() {
                               transition: 'opacity 600ms ease, background-color 150ms ease',
                             }}
                           >
-                            <td className="p-2 font-mono text-xs w-28" style={{ color: '#666680' }}>{commit.agentShort}</td>
+                            <td className="p-2 font-mono text-xs w-28 whitespace-nowrap" style={{ color: '#666680' }}>{commit.agentShort}</td>
                             <td
-                              className="p-2 font-mono text-xs transition-all duration-300 max-w-0"
+                              className="p-2 font-mono text-xs transition-all duration-300"
                               style={{
                                 color: '#00d4ff',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
+                                maxWidth: '140px',
                                 textShadow: commit.isNew ? '0 0 8px rgba(0, 212, 255, 0.9)' : 'none',
                                 filter: commit.isNew ? 'brightness(1.4)' : 'brightness(1)',
-                                width: '100%',
                               }}
                             >
                               {commit.hashShort}
                             </td>
-                            <td className="p-2 font-mono text-xs w-24" style={{ color: '#666680' }}>{commit.block}</td>
+                            <td className="p-2 font-mono text-xs w-24 whitespace-nowrap" style={{ color: '#666680' }}>{commit.block}</td>
                             <td className="p-2 w-20">
                               <span className="px-1 rounded text-xs" style={{ background: '#1a1a2e', color: '#666680' }}>PENDING</span>
                             </td>
@@ -898,13 +898,13 @@ export default function VeilForgeDashboard() {
                       })}
                     </tbody>
                   </table>
-                )}
-              </div>
+                </div>
+              )}
             </div>
             
             {/* REVEALS */}
-            <div className="flex-1 flex flex-col overflow-hidden rounded" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
-              <div className="flex items-center p-4 border-b" style={{ borderColor: '#1a1a2e' }}>
+            <div className="flex-1 flex flex-col rounded min-h-0" style={{ background: '#0d0d14', border: '1px solid #1a1a2e' }}>
+              <div className="flex items-center p-4 border-b shrink-0" style={{ borderColor: '#1a1a2e' }}>
                 <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#666680' }}>REVEALS</span>
                 <span className="ml-2 font-mono text-xs px-2 py-0.5 rounded-full border" style={{ background: '#0d0d14', borderColor: '#1a1a2e', color: '#666680' }}>{displayReveals.length}</span>
                 <span className="ml-auto text-xs font-mono" style={{ background: '#1a1a2e', borderRadius: '0.25rem', padding: '0 6px' }}>
@@ -913,17 +913,17 @@ export default function VeilForgeDashboard() {
                   <span style={{ color: '#ff4466' }}>{displayReveals.filter(r => r.direction === 'ASK').length} ASK</span>
                 </span>
               </div>
-              <div className="flex-1 overflow-hidden">
-                {displayReveals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
-                    <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>◎</span>
-                    <span className="text-xs">No reveals yet</span>
-                    <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Reveals appear ~5 blocks after commit</span>
-                  </div>
-                ) : (
+              {displayReveals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8" style={{ color: '#666680' }}>
+                  <span className="text-3xl mb-2" style={{ opacity: 0.5 }}>◎</span>
+                  <span className="text-xs">No reveals yet</span>
+                  <span className="text-xs mt-1" style={{ opacity: 0.4 }}>Reveals appear ~5 blocks after commit</span>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto min-h-0">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ background: '#111118' }}>
+                    <thead className="sticky top-0" style={{ background: '#111118' }}>
+                      <tr>
                         <th className="text-left p-2 font-normal w-28" style={{ color: '#666680' }}>AGENT</th>
                         <th className="text-left p-2 font-normal w-16" style={{ color: '#666680' }}>DIR</th>
                         <th className="text-left p-2 font-normal w-32" style={{ color: '#666680' }}>PRICE</th>
@@ -942,7 +942,7 @@ export default function VeilForgeDashboard() {
                             borderLeft: `2px solid ${reveal.matching ? '#00d4ff' : reveal.direction === 'BID' ? '#00ff88' : '#ff4466'}`,
                           }}
                         >
-                          <td className="p-2 font-mono text-xs w-28" style={{ color: '#666680' }}>{reveal.agentShort}</td>
+                          <td className="p-2 font-mono text-xs w-28 whitespace-nowrap" style={{ color: '#666680' }}>{reveal.agentShort}</td>
                           <td className="p-2 w-16">
                             <span
                               className="px-1 rounded text-xs"
@@ -954,8 +954,8 @@ export default function VeilForgeDashboard() {
                               {reveal.direction}
                             </span>
                           </td>
-                          <td className="p-2 font-mono text-xs w-32 text-white">{reveal.price.toFixed(2)} USDC</td>
-                          <td className="p-2 font-mono text-xs w-24" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
+                          <td className="p-2 font-mono text-xs w-32 whitespace-nowrap text-white">{reveal.price.toFixed(2)} USDC</td>
+                          <td className="p-2 font-mono text-xs w-24 whitespace-nowrap" style={{ color: '#666680' }}>{reveal.amount.toFixed(2)} WETH</td>
                           <td className="p-2 w-24">
                             <span className="px-1 rounded text-xs" style={{ background: '#001a22', color: '#00d4ff' }}>REVEALED</span>
                           </td>
@@ -963,8 +963,8 @@ export default function VeilForgeDashboard() {
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
           
@@ -1046,9 +1046,9 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* RIGHT PANEL — AGENT COMPETITION */}
-          <div className="w-[30%] flex flex-col">
-            <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
-            <div className="flex flex-col gap-4 flex-1">
+          <div className="w-[30%] flex flex-col min-h-0">
+            <div className="text-xs uppercase tracking-widest font-semibold mb-4 shrink-0" style={{ color: '#666680' }}>AGENT COMPETITION</div>
+            <div className="flex flex-col gap-4 flex-1 overflow-y-auto min-h-0">
               {agentCards.map((agent, i) => {
                 const agentIndex = i + 1
                 const strategy = STRATEGY_KEYS[i] ?? 'marketMaker'
@@ -1060,7 +1060,7 @@ export default function VeilForgeDashboard() {
                 return (
                   <div
                     key={agent.address}
-                    className="rounded-lg p-4 transition-shadow duration-300"
+                    className="rounded-lg p-4 transition-shadow duration-300 shrink-0"
                     style={{
                       background: '#0d0d14',
                       border: '1px solid #1a1a2e',
