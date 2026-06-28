@@ -30,6 +30,14 @@
 
 ---
 
+## Judge Access Code
+
+```
+JUDGE_ACCESS_CODE=veilforge2026demo
+```
+
+---
+
 ## What Is VeilForge
 
 VeilForge is an orderbook where orders are invisible until they execute.
