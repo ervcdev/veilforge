@@ -7,8 +7,10 @@ import Link from 'next/link'
 import { useVeilForge } from '@/hooks/useVeilForge'
 
 //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
+//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ||  'https://afar-opposite-agreement.ngrok-free.dev'
+
+
 
 // Types
 interface CommitRow {
@@ -133,9 +135,11 @@ export default function VeilForgeDashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
-        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-        //const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://tu-backend-de-render.onrender.com';
-        const res = await fetch(`${BACKEND_URL}/api/agents/status`)
+        const res = await fetch(`${BACKEND_URL}/api/agents/status`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        })
         if (!res.ok) return
         const data = await res.json()
         setBackendOnline(true)
@@ -167,7 +171,11 @@ export default function VeilForgeDashboard() {
     const poll = async () => {
       for (const idx of openPanels) {
         try {
-          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
+          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        })
           if (!res.ok) continue
           setBackendOnline(true)
           const data = await res.json()
@@ -692,7 +700,7 @@ export default function VeilForgeDashboard() {
         </div>
       )}
 
-      <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
+      <div className="min-h-screen w-full flex flex-col overflow-y-auto" style={{ background: '#0a0a0f', minWidth: '1280px' }}>
         {/* TOP BAR */}
         <div className="h-12 flex items-center justify-between px-6" style={{ background: '#080810', borderBottom: '1px solid #1a1a2e' }}>
           {/* Logo */}
@@ -921,9 +929,9 @@ export default function VeilForgeDashboard() {
           </div>
           
           {/* CENTER PANEL - SWAP */}
-          <div className="w-[30%]">
+          <div className="w-[30%] self-start">
             <div
-              className="h-full rounded-lg p-6 flex flex-col"
+              className="rounded-lg p-6 flex flex-col"
               style={{ background: '#0d0d14', border: '1px solid rgba(0, 212, 255, 0.3)' }}
             >
               <div className="text-xs uppercase tracking-widest font-bold" style={{ color: '#00d4ff' }}>BEST AVAILABLE RATE</div>
@@ -1002,7 +1010,7 @@ export default function VeilForgeDashboard() {
           
           {/* ── RIGHT PANEL — AGENT COMPETITION ── */}
           <div className="w-[30%] flex flex-col">
-            <div className="text-xs uppercase tracking-widest font-semibold mb-4" style={{ color: '#666680' }}>AGENT COMPETITION</div>
+            <div className="text-sm uppercase tracking-widest font-bold mb-5 text-slate-200">AGENT COMPETITION</div>
             <div className="flex flex-col gap-4 flex-1">
               {agentCards.map((agent, i) => {
                 const agentIndex = i + 1
