@@ -6,9 +6,7 @@ import Link from 'next/link'
 
 import { useVeilForge } from '@/hooks/useVeilForge'
 
-//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://veilforge-backend.onrender.com'
-//const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ||  'https://afar-opposite-agreement.ngrok-free.dev'
 
 
 
@@ -135,11 +133,7 @@ export default function VeilForgeDashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/agents/status`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
-        })
+        const res = await fetch(`${BACKEND_URL}/api/agents/status`)
         if (!res.ok) return
         const data = await res.json()
         setBackendOnline(true)
@@ -171,11 +165,7 @@ export default function VeilForgeDashboard() {
     const poll = async () => {
       for (const idx of openPanels) {
         try {
-          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
-        })
+          const res  = await fetch(`${BACKEND_URL}/api/agents/logs?agentIndex=${idx}`)
           if (!res.ok) continue
           setBackendOnline(true)
           const data = await res.json()
@@ -587,7 +577,6 @@ export default function VeilForgeDashboard() {
         method:  'POST',
         headers: {
           'Content-Type':         'application/json',
-          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
         },
         body: JSON.stringify({ agentIndex, strategy })
@@ -625,7 +614,6 @@ export default function VeilForgeDashboard() {
         method:  'POST',
         headers: {
           'Content-Type':         'application/json',
-          'ngrok-skip-browser-warning': 'true',
           'X-Judge-Access-Token': accessCode
         },
         body: JSON.stringify({ agentIndex })
